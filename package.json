@@ -1,0 +1,21 @@
+{
+  "name": "arch-firm-dashboard",
+  "version": "1.0.0",
+  "description": "Employee time tracking and admin dashboard for architectural firm",
+  "private": true,
+  "workspaces": [
+    "admin",
+    "desktop",
+    "shared"
+  ],
+  "scripts": {
+    "dev:admin": "cd admin && npm run dev",
+    "dev:desktop": "cd desktop && npm run dev",
+    "build:admin": "cd admin && npm run build",
+    "build:desktop": "cd desktop && npm run build",
+    "install:all": "npm install && cd admin && npm install && cd ../desktop && npm install"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ArchTrack Admin Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; }
+        .header { background: #1a1a2e; color: white; padding: 20px; }
+        .header h1 { font-size: 24px; }
+        .header .subtitle { opacity: 0.8; font-size: 14px; margin-top: 5px; }
+        .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .stat-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .stat-card h3 { color: #666; font-size: 12px; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 0.5px; }
+        .stat-card .value { font-size: 36px; font-weight: bold; color: #1a1a2e; }
+        .stat-card .sub { font-size: 12px; color: #999; margin-top: 5px; }
+        .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .chart-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .chart-card h3 { margin-bottom: 15px; color: #1a1a2e; font-size: 16px; }
+        .employees { background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden; }
+        .employees table { width: 100%; border-collapse: collapse; }
+        .employees th, .employees td { padding: 15px; text-align: left; border-bottom: 1px solid #eee; }
+        .employees th { background: #f8f9fa; font-weight: 600; color: #666; font-size: 12px; text-transform: uppercase; }
+        .status { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+        .status.online .status-dot { background: #28a745; box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.2); }
+        .status.offline .status-dot { background: #dc3545; }
+        .status.online { color: #28a745; }
+        .status.offline { color: #dc3545; }
+        .project-badge { 
+            display: inline-block; 
+            padding: 4px 10px; 
+            border-radius: 12px; 
+            font-size: 12px; 
+            font-weight: 500;
+            background: #e9ecef;
+            color: #495057;
+        }
+        .project-badge.downtown { background: #cfe2ff; color: #084298; }
+        .project-badge.residential { background: #d1e7dd; color: #0f5132; }
+        .project-badge.community { background: #f8d7da; color: #842029; }
+        .project-badge.design { background: #fff3cd; color: #664d03; }
+        .project-badge.development { background: #e2e3f3; color: #383d7a; }
+        .last-seen { font-size: 12px; color: #666; }
+        .refresh-indicator { 
+            position: fixed; 
+            top: 20px; 
+            right: 20px; 
+            background: #28a745; 
+            color: white; 
+            padding: 8px 16px; 
+            border-radius: 20px; 
+            font-size: 12px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .refresh-indicator.show { opacity: 1; }
+        .empty-state { text-align: center; padding: 40px; color: #666; }
+        .empty-state svg { width: 48px; height: 48px; margin-bottom: 16px; opacity: 0.3; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .live-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            color: #28a745;
+            margin-left: 10px;
+        }
+        .live-indicator::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            background: #28a745;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="refresh-indicator" id="refreshIndicator">Updated</div>
+    
+    <div class="header">
+        <div class="container">
+            <h1>ArchTrack Admin Dashboard <span class="live-indicator">LIVE</span></h1>
+            <p class="subtitle">Real-time employee activity monitoring</p>
+        </div>
+    </div>
+    
+    <div class="container">
+        <div class="stats">
+            <div class="stat-card">
+                <h3>Total Employees</h3>
+                <div class="value" id="totalEmployees">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>Online Now</h3>
+                <div class="value" id="onlineNow">-</div>
+                <div class="sub">Active trackers</div>
+            </div>
+            <div class="stat-card">
+                <h3>Active Projects</h3>
+                <div class="value" id="activeProjects">-</div>
+                <div class="sub">With activity today</div>
+            </div>
+            <div class="stat-card">
+                <h3>Last Update</h3>
+                <div class="value" id="lastUpdate" style="font-size: 18px; padding-top: 8px;">-</div>
+            </div>
+        </div>
+        
+        <div class="charts">
+            <div class="chart-card">
+                <h3>Today's Activity by Project</h3>
+                <canvas id="projectChart"></canvas>
+                <div id="projectEmpty" class="empty-state" style="display: none;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <path d="M12 6v6l4 2"/>
+                    </svg>
+                    <p>No activity data yet</p>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3>Employee Hours Today</h3>
+                <canvas id="employeeChart"></canvas>
+            </div>
+        </div>
+        
+        <div class="employees">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>Status</th>
+                        <th>Current Project</th>
+                        <th>Last Active</th>
+                    </tr>
+                </thead>
+                <tbody id="employeeTable">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let projectChart, employeeChart;
+        let lastData = null;
+        
+        // Color scheme for projects
+        const projectColors = {
+            'Downtown Office': '#0d6efd',
+            'Residential Complex': '#198754',
+            'Community Center': '#dc3545',
+            'Design Work': '#ffc107',
+            'Development': '#6f42c1',
+            'Admin/Other': '#6c757d'
+        };
+        
+        function getProjectClass(project) {
+            const lower = (project || '').toLowerCase();
+            if (lower.includes('downtown')) return 'downtown';
+            if (lower.includes('residential')) return 'residential';
+            if (lower.includes('community')) return 'community';
+            if (lower.includes('design')) return 'design';
+            if (lower.includes('development')) return 'development';
+            return '';
+        }
+        
+        function formatDuration(seconds) {
+            if (seconds < 60) return `${seconds}s`;
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return `${minutes}m`;
+            const hours = (minutes / 60).toFixed(1);
+            return `${hours}h`;
+        }
+        
+        function showRefreshIndicator() {
+            const indicator = document.getElementById('refreshIndicator');
+            indicator.classList.add('show');
+            setTimeout(() => indicator.classList.remove('show'), 1500);
+        }
+        
+        async function loadDashboard() {
+            try {
+                const response = await fetch('/api/dashboard');
+                const result = await response.json();
+                
+                if (!result.success) {
+                    console.error('API error:', result.error);
+                    return;
+                }
+                
+                const data = result.data;
+                
+                // Check if data changed
+                const dataHash = JSON.stringify(data.projectStats) + JSON.stringify(data.employees);
+                if (lastData === dataHash) return;
+                lastData = dataHash;
+                
+                // Update stats
+                document.getElementById('totalEmployees').textContent = data.totalEmployees;
+                document.getElementById('onlineNow').textContent = data.onlineNow;
+                document.getElementById('activeProjects').textContent = data.activeProjects;
+                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+                
+                // Update employee table
+                const tbody = document.getElementById('employeeTable');
+                if (data.employees.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 40px; color: #666;">No employees registered</td></tr>';
+                } else {
+                    tbody.innerHTML = data.employees.map(emp => {
+                        const projectClass = getProjectClass(emp.currentProject);
+                        const timeAgo = emp.lastActive ? 
+                            new Date(emp.lastActive).toLocaleTimeString() : 
+                            'Never';
+                        return `
+                            <tr>
+                                <td>
+                                    <strong>${emp.name}</strong>
+                                    <div style="font-size: 12px; color: #999;">${emp.email}</div>
+                                </td>
+                                <td>
+                                    <span class="status ${emp.status}">
+                                        <span class="status-dot"></span>
+                                        ${emp.status}
+                                    </span>
+                                </td>
+                                <td>
+                                    ${emp.currentProject !== '-' ? 
+                                        `<span class="project-badge ${projectClass}">${emp.currentProject}</span>` : 
+                                        '<span style="color: #999;">-</span>'}
+                                </td>
+                                <td class="last-seen">${timeAgo}</td>
+                            </tr>
+                        `;
+                    }).join('');
+                }
+                
+                // Update charts
+                updateCharts(data);
+                showRefreshIndicator();
+                
+            } catch (err) {
+                console.error('Error loading dashboard:', err);
+            }
+        }
+        
+        function updateCharts(data) {
+            const ctx1 = document.getElementById('projectChart').getContext('2d');
+            const ctx2 = document.getElementById('employeeChart').getContext('2d');
+            
+            // Project stats
+            const projectStats = data.projectStats || {};
+            const projectLabels = Object.keys(projectStats);
+            const projectValues = Object.values(projectStats).map(s => (s / 3600).toFixed(2));
+            const projectColorValues = projectLabels.map(p => projectColors[p] || '#6c757d');
+            
+            // Show/hide empty state
+            const projectEmpty = document.getElementById('projectEmpty');
+            if (projectLabels.length === 0) {
+                projectEmpty.style.display = 'block';
+                if (projectChart) {
+                    projectChart.destroy();
+                    projectChart = null;
+                }
+            } else {
+                projectEmpty.style.display = 'none';
+                
+                if (projectChart) projectChart.destroy();
+                
+                projectChart = new Chart(ctx1, {
+                    type: 'doughnut',
+                    data: {
+                        labels: projectLabels,
+                        datasets: [{
+                            data: projectValues,
+                            backgroundColor: projectColorValues,
+                            borderWidth: 2,
+                            borderColor: '#fff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: true,
+                        plugins: {
+                            legend: { 
+                                position: 'bottom',
+                                labels: { padding: 15, font: { size: 11 } }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: (item) => {
+                                        const hours = item.raw;
+                                        const minutes = Math.round(hours * 60);
+                                        return `${item.label}: ${hours}h (${minutes} min)`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // Employee hours chart
+            const employeeHours = data.employeeHours || {};
+            const empNames = Object.keys(employeeHours);
+            
+            // Calculate total hours per employee across all projects
+            const empTotals = empNames.map(name => {
+                const projects = employeeHours[name];
+                const total = Object.values(projects).reduce((a, b) => a + b, 0);
+                return (total / 3600).toFixed(2);
+            });
+            
+            if (employeeChart) employeeChart.destroy();
+            
+            employeeChart = new Chart(ctx2, {
+                type: 'bar',
+                data: {
+                    labels: empNames.length > 0 ? empNames : ['No Data'],
+                    datasets: [{
+                        label: 'Hours Today',
+                        data: empNames.length > 0 ? empTotals : [0],
+                        backgroundColor: '#1a1a2e',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    scales: {
+                        y: { 
+                            beginAtZero: true, 
+                            title: { display: true, text: 'Hours' } 
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (item) => `${item.raw} hours`
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Load immediately and refresh every 10 seconds
+        loadDashboard();
+        setInterval(loadDashboard, 10000);
+        
+        console.log('ArchTrack Dashboard loaded - refreshing every 10 seconds');
+    </script>
+</body>
+</html>

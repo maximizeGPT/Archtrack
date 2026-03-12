@@ -1,0 +1,264 @@
+{
+  "activities": {
+    "emp-001": [
+      {
+        "timestamp": "2026-03-08T09:47:34.3NZ",
+        "windowTitle": "arch-firm-dashboard - main.ts — Cursor",
+        "appName": "Cursor",
+        "project": "Development",
+        "idle": false
+      },
+      {
+        "timestamp": "2026-03-08T09:47:34.3NZ",
+        "windowTitle": "AutoCAD 2024 - Floor Plan.dwg",
+        "appName": "AutoCAD",
+        "project": "Design Work",
+        "idle": false
+      },
+      {
+        "timestamp": "2026-03-08T09:47:34.3NZ",
+        "windowTitle": "Downtown Office Tower - Revit",
+        "appName": "Revit",
+        "project": "Downtown Office",
+        "idle": false
+      },
+      {
+        "timestamp": "2026-03-08T09:47:51.527Z",
+        "windowTitle": "Revit 2024 - Residential Complex.rvt",
+        "appName": "AutoCAD",
+        "project": "Residential Complex",
+        "idle": false
+      },
+      {
+        "timestamp": "2026-03-08T09:48:14.615Z",
+        "windowTitle": "SketchUp Pro - Downtown Office Model",
+        "appName": "Cursor",
+        "project": "Downtown Office",
+        "idle": false
+      },
+      {
+        "timestamp": "2026-03-08T09:48:45.296Z",
+        "windowTitle": "Unknown",
+        "appName": "Unknown",
+        "project": "Admin/Other",
+        "idle": false
+      },
+      {
+        "timestamp": "2026-03-08T09:48:50.307Z",
+        "windowTitle": "ArchTrack - Time Tracker",
+        "appName": "Electron",
+        "project": "Development",
+        "idle": false
+      },
+      {
+        "timestamp": "2026-03-08T09:48:55.369Z",
+        "windowTitle": "Screen & System Audio Recording",
+        "appName": "System Settings",
+        "project": "Admin/Other",
+        "idle": false
+      },
+      {
+        "timestamp": "2026-03-08T09:49:00.405Z",
+        "windowTitle": "Unknown",
+        "appName": "Unknown",
+        "project": "Admin/Other",
+        "idle": false
+      },
+      {
+        "timestamp": "2026-03-08T09:49:05.464Z",
+        "windowTitle": "desktop — -zsh — 120×30",
+        "appName": "Terminal",
+        "project": "Admin/Other",
+        "idle": false
+      },
+      {
+        "timestamp": "2026-03-08T09:49:10.471Z",
+        "windowTitle": "Unknown",
+        "appName": "Unknown",
+        "project": "Admin/Other",
+        "idle": false
+      },
+      {
+        "timestamp": "2026-03-08T09:49:15.493Z",
+        "windowTitle": "desktop — -zsh — 120×30",
+        "appName": "Terminal",
+        "project": "Admin/Other",
+        "idle": false
+      }
+    ],
+    "bae68739-e282-4e0d-bb36-fb79894feed4": [
+      {
+        "id": "1772965102582-fhuk0x7ly",
+        "timestamp": "2026-03-08T10:18:22.583Z",
+        "appName": "GitHub",
+        "windowTitle": "Notion - Project Notes",
+        "category": "admin_other",
+        "categoryName": "Admin/Other",
+        "productivityScore": 50,
+        "productivityLevel": "neutral",
+        "isSuspicious": false,
+        "isIdle": false,
+        "idleTimeSeconds": 0,
+        "durationSeconds": 5
+      },
+      {
+        "id": "1772966340853-l90fwayhg",
+        "timestamp": "2026-03-08T10:39:00.853Z",
+        "appName": "Unknown",
+        "windowTitle": "Unknown",
+        "category": "admin_other",
+        "categoryName": "Admin/Other",
+        "productivityScore": 50,
+        "productivityLevel": "neutral",
+        "isSuspicious": false,
+        "isIdle": false,
+        "idleTimeSeconds": 0,
+        "durationSeconds": 5
+      },
+      {
+        "id": "1772966566134-2byrjlln8",
+        "timestamp": "2026-03-08T10:42:46.134Z",
+        "appName": "loginwindow",
+        "windowTitle": "Untitled",
+        "category": "admin_other",
+        "categoryName": "Admin/Other",
+        "productivityScore": 50,
+        "productivityLevel": "neutral",
+        "isSuspicious": false,
+        "isIdle": false,
+        "idleTimeSeconds": 1,
+        "durationSeconds": 5
+      },
+      {
+        "id": "1772966841523-no5ujh8p8",
+        "timestamp": "2026-03-08T10:47:21.523Z",
+        "appName": "Safari",
+        "windowTitle": "Untitled",
+        "category": "admin_other",
+        "categoryName": "Admin/Other",
+        "productivityScore": 50,
+        "productivityLevel": "neutral",
+        "isSuspicious": false,
+        "isIdle": false,
+        "idleTimeSeconds": 0,
+        "durationSeconds": 5
+      },
+      {
+        "id": "1772966866424-ih2umafce",
+        "timestamp": "2026-03-08T10:47:46.424Z",
+        "appName": "Unknown",
+        "windowTitle": "Unknown",
+        "category": "admin_other",
+        "categoryName": "Admin/Other",
+        "productivityScore": 50,
+        "productivityLevel": "neutral",
+        "isSuspicious": false,
+        "isIdle": false,
+        "idleTimeSeconds": 0,
+        "durationSeconds": 5
+      },
+      {
+        "id": "1772966871515-6ktq1kar5",
+        "timestamp": "2026-03-08T10:47:51.516Z",
+        "appName": "Safari",
+        "windowTitle": "Untitled",
+        "category": "admin_other",
+        "categoryName": "Admin/Other",
+        "productivityScore": 50,
+        "productivityLevel": "neutral",
+        "isSuspicious": false,
+        "isIdle": false,
+        "idleTimeSeconds": 0,
+        "durationSeconds": 5
+      },
+      {
+        "id": "1772966924386-pzleb5x18",
+        "timestamp": "2026-03-08T10:48:44.386Z",
+        "appName": "Unknown",
+        "windowTitle": "Unknown",
+        "category": "admin_other",
+        "categoryName": "Admin/Other",
+        "productivityScore": 50,
+        "productivityLevel": "neutral",
+        "isSuspicious": false,
+        "isIdle": false,
+        "idleTimeSeconds": 0,
+        "durationSeconds": 5
+      },
+      {
+        "id": "1772966934519-epjxmqte1",
+        "timestamp": "2026-03-08T10:48:54.519Z",
+        "appName": "Safari",
+        "windowTitle": "Untitled",
+        "category": "admin_other",
+        "categoryName": "Admin/Other",
+        "productivityScore": 50,
+        "productivityLevel": "neutral",
+        "isSuspicious": false,
+        "isIdle": false,
+        "idleTimeSeconds": 0,
+        "durationSeconds": 5
+      },
+      {
+        "id": "1772966939432-eko1xfqnv",
+        "timestamp": "2026-03-08T10:48:59.432Z",
+        "appName": "System Settings",
+        "windowTitle": "Keyboard",
+        "category": "admin_other",
+        "categoryName": "Admin/Other",
+        "productivityScore": 50,
+        "productivityLevel": "neutral",
+        "isSuspicious": false,
+        "isIdle": false,
+        "idleTimeSeconds": 0,
+        "durationSeconds": 5
+      },
+      {
+        "id": "1772966954520-nzw5xkq6b",
+        "timestamp": "2026-03-08T10:49:14.520Z",
+        "appName": "Safari",
+        "windowTitle": "Untitled",
+        "category": "admin_other",
+        "categoryName": "Admin/Other",
+        "productivityScore": 50,
+        "productivityLevel": "neutral",
+        "isSuspicious": false,
+        "isIdle": false,
+        "idleTimeSeconds": 0,
+        "durationSeconds": 5
+      }
+    ]
+  },
+  "employeeStatus": {
+    "emp-001": {
+      "lastSeen": "2026-03-08T09:49:20.458Z",
+      "lastActivity": {
+        "timestamp": "2026-03-08T09:49:15.493Z",
+        "windowTitle": "desktop — -zsh — 120×30",
+        "appName": "Terminal",
+        "project": "Admin/Other",
+        "idle": false
+      },
+      "isOnline": false
+    },
+    "bae68739-e282-4e0d-bb36-fb79894feed4": {
+      "lastSeen": "2026-03-08T10:49:19.385Z",
+      "lastActivity": {
+        "id": "1772966954520-nzw5xkq6b",
+        "timestamp": "2026-03-08T10:49:14.520Z",
+        "appName": "Safari",
+        "windowTitle": "Untitled",
+        "category": "admin_other",
+        "categoryName": "Admin/Other",
+        "productivityScore": 50,
+        "productivityLevel": "neutral",
+        "isSuspicious": false,
+        "isIdle": false,
+        "idleTimeSeconds": 0,
+        "durationSeconds": 5
+      },
+      "isOnline": true
+    }
+  },
+  "savedAt": "2026-03-08T22:34:48.432Z"
+}
