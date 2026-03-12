@@ -1,6 +1,21 @@
-# ArchTrack - Employee Time Tracking & Admin Dashboard
+# ArchTrack
 
-An employee time tracking and productivity monitoring system for your uncle's manufacturing business.
+Open-source employee time tracking and productivity analytics for small businesses.
+
+Built for manufacturing firms, architecture studios, and any business that needs visibility into how their team's time is spent — without the enterprise price tag.
+
+## Features
+
+- **Automatic time tracking** — Desktop app runs silently, no manual entry
+- **Project assignment** — Clock into specific projects/tasks
+- **Privacy-first** — Data stays on your infrastructure
+- **Real-time dashboard** — See who's working on what right now
+- **Productivity scoring** — AI-classified app usage (productive vs neutral vs distracting)
+- **Suspicious activity detection** — Flags unusual patterns (YouTube binges, rapid app switching)
+- **AI-powered insights** — Chat with your team's data, identify repetitive tasks, find automation opportunities
+- **Natural language queries** — "How much time did Ahmed spend on emails this week?"
+- **Repetitive task detection** — Automatically identifies patterns that could be automated
+- **Agent opportunity scoring** — Ranks tasks by how "agentifiable" they are
 
 ## Architecture
 
@@ -13,85 +28,91 @@ arch-firm-dashboard/
 
 ## Quick Start
 
-### 1. Install Dependencies
+### 1. Clone and install
 
 ```bash
-cd arch-firm-dashboard
+git clone https://github.com/mohltbot/archtrack.git
+cd archtrack
 npm run install:all
 ```
 
-### 2. Start Admin Dashboard
+### 2. Start admin dashboard
 
 ```bash
 cd admin
 npm run dev
 ```
 
-This starts:
-- Server: http://localhost:3001
-- Dashboard: http://localhost:5174
-
-### 3. Build Desktop App (Optional)
+### 3. Build desktop tracker (optional)
 
 ```bash
-cd desktop
-npm install
+cd ../desktop
 npm run build
 ```
 
-## Features
+## Tech Stack
 
-### Admin Dashboard
-- **Employee Management**: Add/edit/delete employees
-- **Project Tracking**: Create projects, assign tasks
-- **Time Tracking**: View hours logged by employee/project
-- **Productivity Reports**: See productivity scores and suspicious activity
-- **Real-time Updates**: WebSocket connection for live activity feed
-
-### Desktop Tracker
-- Automatic activity tracking
-- App usage classification
-- Idle time detection
-- Productivity scoring
-- Suspicious activity detection (YouTube idle, rapid switching, etc.)
-
-## API Endpoints
-
-- `GET /api/employees` - List all employees
-- `POST /api/employees` - Create employee
-- `GET /api/projects` - List all projects
-- `GET /api/activities` - Get activity logs
-- `GET /api/reports/productivity` - Generate productivity report
-- `WS /ws` - WebSocket for real-time updates
-
-## Database
-
-SQLite database stored in `admin/data/admin.db`
-
-Tables:
-- `employees` - Employee records
-- `projects` - Project information
-- `tasks` - Task assignments
-- `activities` - Activity tracking data
-- `time_entries` - Legacy time entries
-
-## Development
-
-### Tech Stack
 - **Frontend**: React + TypeScript + Vite
 - **Backend**: Express + WebSocket + SQLite
-- **Desktop**: Electron + active-win (window tracking)
+- **Desktop**: Electron + active-win (cross-platform window tracking)
+- **AI**: Claude API for natural language queries and pattern analysis
 
-### File Structure
-```
-admin/
-├── src/client/     # React frontend
-│   ├── pages/      # Dashboard, Employees, Projects, Tasks, Reports
-│   └── contexts/   # WebSocket context
-├── server/         # Express backend
-│   ├── index.ts    # Server entry
-│   ├── routes.ts   # API routes
-│   ├── database.ts # SQLite operations
-│   └── websocket.ts# WebSocket handler
-└── data/           # SQLite database
-```
+## Privacy
+
+ArchTrack captures:
+- App usage (app name, window title)
+- Time spent per app/website
+- Productivity classification
+- Idle time detection
+- Project/task assignments
+
+All data stays local by default. Optional cloud sync for multi-location teams.
+
+## AI Features
+
+Ask questions like:
+- "What did Sarah work on yesterday?"
+- "Who spent the most time in meetings this week?"
+- "Show me repetitive tasks that could be automated"
+
+Automatically identifies:
+- Copy-paste workflows
+- Data entry patterns
+- Email response templates
+- Report generation sequences
+
+Ranks detected patterns by:
+- Frequency (how often it happens)
+- Time cost (hours per week)
+- Complexity (easy vs hard to automate)
+- ROI potential (time saved vs implementation cost)
+
+## Use Cases
+
+- **Architecture firms** — Track billable hours per project
+- **Manufacturing** — Monitor office vs floor time
+- **Remote teams** — Visibility without micromanagement
+- **Consulting** — Automated timesheet generation
+
+## Roadmap
+
+- [x] Core time tracking
+- [x] Productivity scoring
+- [x] Admin dashboard
+- [x] AI chat interface
+- [ ] Multi-location sync
+- [ ] Mobile companion app
+- [ ] Payroll integrations
+- [ ] Advanced automation recommendations
+
+## Contributing
+
+This is a passion project built for my uncle's architecture firm. Contributions welcome!
+
+## License
+
+MIT — use it, modify it, sell it. Just don't blame me if it breaks.
+
+---
+
+Built with ❤️ by someone who thinks small businesses deserve big tools.
