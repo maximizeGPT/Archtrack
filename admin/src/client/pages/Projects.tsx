@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { Project } from '@archtrack/shared';
+import type { Project } from '../../../shared-types';
 
 export const Projects: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -108,34 +108,48 @@ export const Projects: React.FC = () => {
               {editingProject ? 'Edit Project' : 'Add Project'}
             </h2>
             <form onSubmit={handleSubmit} style={styles.form}>
-              <input
-                type="text"
-                placeholder="Project Name"
-                value={formData.name}
-                onChange={e => setFormData({...formData, name: e.target.value})}
-                style={styles.input}
-                required
-              />
-              <textarea
-                placeholder="Description"
-                value={formData.description}
-                onChange={e => setFormData({...formData, description: e.target.value})}
-                style={{...styles.input, minHeight: '80px'}}
-              />
-              <input
-                type="text"
-                placeholder="Client Name"
-                value={formData.clientName}
-                onChange={e => setFormData({...formData, clientName: e.target.value})}
-                style={styles.input}
-              />
-              <input
-                type="number"
-                placeholder="Budget"
-                value={formData.budget}
-                onChange={e => setFormData({...formData, budget: e.target.value})}
-                style={styles.input}
-              />
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Project Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Smith Residence"
+                  value={formData.name}
+                  onChange={e => setFormData({...formData, name: e.target.value})}
+                  style={styles.input}
+                  required
+                />
+              </div>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Description</label>
+                <textarea
+                  placeholder="Project details..."
+                  value={formData.description}
+                  onChange={e => setFormData({...formData, description: e.target.value})}
+                  style={{...styles.input, minHeight: '80px'}}
+                />
+              </div>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Client Name</label>
+                <input
+                  type="text"
+                  placeholder="e.g. John Smith"
+                  value={formData.clientName}
+                  onChange={e => setFormData({...formData, clientName: e.target.value})}
+                  style={styles.input}
+                />
+              </div>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Budget ($)</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 50000"
+                  value={formData.budget}
+                  onChange={e => setFormData({...formData, budget: e.target.value})}
+                  style={styles.input}
+                  min="0"
+                  step="1000"
+                />
+              </div>
               <div style={styles.formButtons}>
                 <button 
                   type="button" 
@@ -243,7 +257,17 @@ const styles: { [key: string]: React.CSSProperties | any } = {
   form: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px'
+    gap: '16px'
+  },
+  inputGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px'
+  },
+  label: {
+    fontSize: '13px',
+    fontWeight: 500,
+    color: '#555'
   },
   input: {
     padding: '12px',

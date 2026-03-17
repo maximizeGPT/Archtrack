@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { Task, Project, Employee } from '@archtrack/shared';
+import type { Task, Project, Employee } from '../../../shared-types';
 
 export const Tasks: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -142,57 +142,77 @@ export const Tasks: React.FC = () => {
               {editingTask ? 'Edit Task' : 'Add Task'}
             </h2>
             <form onSubmit={handleSubmit} style={styles.form}>
-              <input
-                type="text"
-                placeholder="Task Name"
-                value={formData.name}
-                onChange={e => setFormData({...formData, name: e.target.value})}
-                style={styles.input}
-                required
-              />
-              <textarea
-                placeholder="Description"
-                value={formData.description}
-                onChange={e => setFormData({...formData, description: e.target.value})}
-                style={{...styles.input, minHeight: '60px'}}
-              />
-              <select
-                value={formData.projectId}
-                onChange={e => setFormData({...formData, projectId: e.target.value})}
-                style={styles.input}
-                required
-              >
-                <option value="">Select Project</option>
-                {projects.map(p => (
-                  <option key={p.id} value={p.id}>{p.name}</option>
-                ))}
-              </select>
-              <select
-                value={formData.assignedTo}
-                onChange={e => setFormData({...formData, assignedTo: e.target.value})}
-                style={styles.input}
-              >
-                <option value="">Unassigned</option>
-                {employees.map(e => (
-                  <option key={e.id} value={e.id}>{e.name}</option>
-                ))}
-              </select>
-              <select
-                value={formData.priority}
-                onChange={e => setFormData({...formData, priority: e.target.value})}
-                style={styles.input}
-              >
-                <option value="low">Low Priority</option>
-                <option value="medium">Medium Priority</option>
-                <option value="high">High Priority</option>
-              </select>
-              <input
-                type="number"
-                placeholder="Estimated Hours"
-                value={formData.estimatedHours}
-                onChange={e => setFormData({...formData, estimatedHours: e.target.value})}
-                style={styles.input}
-              />
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Task Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Design floor plans"
+                  value={formData.name}
+                  onChange={e => setFormData({...formData, name: e.target.value})}
+                  style={styles.input}
+                  required
+                />
+              </div>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Description</label>
+                <textarea
+                  placeholder="Task details..."
+                  value={formData.description}
+                  onChange={e => setFormData({...formData, description: e.target.value})}
+                  style={{...styles.input, minHeight: '60px'}}
+                />
+              </div>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Project *</label>
+                <select
+                  value={formData.projectId}
+                  onChange={e => setFormData({...formData, projectId: e.target.value})}
+                  style={styles.input}
+                  required
+                >
+                  <option value="">Select a project</option>
+                  {projects.map(p => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Assigned To</label>
+                <select
+                  value={formData.assignedTo}
+                  onChange={e => setFormData({...formData, assignedTo: e.target.value})}
+                  style={styles.input}
+                >
+                  <option value="">Unassigned</option>
+                  {employees.map(e => (
+                    <option key={e.id} value={e.id}>{e.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Priority</label>
+                <select
+                  value={formData.priority}
+                  onChange={e => setFormData({...formData, priority: e.target.value})}
+                  style={styles.input}
+                >
+                  <option value="low">Low Priority</option>
+                  <option value="medium">Medium Priority</option>
+                  <option value="high">High Priority</option>
+                </select>
+              </div>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Estimated Hours</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 8"
+                  value={formData.estimatedHours}
+                  onChange={e => setFormData({...formData, estimatedHours: e.target.value})}
+                  style={styles.input}
+                  min="0"
+                  step="0.5"
+                />
+              </div>
               <div style={styles.formButtons}>
                 <button 
                   type="button" 
@@ -301,7 +321,17 @@ const styles: { [key: string]: React.CSSProperties | any } = {
   form: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px'
+    gap: '16px'
+  },
+  inputGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px'
+  },
+  label: {
+    fontSize: '13px',
+    fontWeight: 500,
+    color: '#555'
   },
   input: {
     padding: '12px',

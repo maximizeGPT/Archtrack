@@ -1,94 +1,156 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { Dashboard } from './pages/Dashboard';
 import { Employees } from './pages/Employees';
 import { Projects } from './pages/Projects';
 import { Tasks } from './pages/Tasks';
 import { Reports } from './pages/Reports';
 import { WebSocketProvider } from './contexts/WebSocketContext';
+import './App.css';
 
+type ConnectionStatus = 'loading' | 'connected' | 'disconnected';
 type Page = 'dashboard' | 'employees' | 'projects' | 'tasks' | 'reports';
 
-const App: React.FC = () => {
-  const [currentPage, setCurrentPage] = useState<Page>('dashboard');
-  const [isConnected, setIsConnected] = useState(false);
+const AppContent: React.FC = () => {
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('loading');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const location = useLocation();
+  const navigate = useNavigate();
 
+  // Get current page from URL
+  const getCurrentPage = (): Page => {
+    const path = location.pathname.slice(1) || 'dashboard';
+    return (path as Page) || 'dashboard';
+  };
+
+  const currentPage = getCurrentPage();
+
+  // Handle window resize
   useEffect(() => {
-    // Check API health
-    fetch('/api/health')
-      .then(() => setIsConnected(true))
-      .catch(() => setIsConnected(false));
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+      if (window.innerWidth >= 768) {
+        setIsMobileMenuOpen(false);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const renderPage = () => {
-    switch (currentPage) {
-      case 'dashboard':
-        return <Dashboard />;
-      case 'employees':
-        return <Employees />;
-      case 'projects':
-        return <Projects />;
-      case 'tasks':
-        return <Tasks />;
-      case 'reports':
-        return <Reports />;
-      default:
-        return <Dashboard />;
+  // Check API health with retry
+  const checkHealth = useCallback(async () => {
+    try {
+      const response = await fetch('/api/health');
+      if (response.ok) {
+        setConnectionStatus('connected');
+      } else {
+        setConnectionStatus('disconnected');
+      }
+    } catch {
+      setConnectionStatus('disconnected');
     }
+  }, []);
+
+  useEffect(() => {
+    checkHealth();
+    const interval = setInterval(checkHealth, 30000);
+    return () => clearInterval(interval);
+  }, [checkHealth]);
+
+  const handleNavClick = (page: Page) => {
+    navigate(`/${page === 'dashboard' ? '' : page}`);
+    setIsMobileMenuOpen(false);
   };
 
   return (
-    <WebSocketProvider>
-      <div style={styles.container}>
-        <aside style={styles.sidebar}>
-          <div style={styles.logo}>
-            <h1 style={styles.logoText}>ArchTrack</h1>
-            <span style={styles.logoSubtext}>Admin</span>
+    <div className="app-container">
+      {/* Mobile Header */}
+      {isMobile && (
+        <header className="mobile-header">
+          <div className="mobile-logo">
+            <h1>ArchTrack</h1>
+            <span>Admin</span>
           </div>
-          
-          <nav style={styles.nav}>
-            <NavItem 
-              label="Dashboard" 
-              icon="📊" 
-              active={currentPage === 'dashboard'}
-              onClick={() => setCurrentPage('dashboard')}
-            />
-            <NavItem 
-              label="Employees" 
-              icon="👥" 
-              active={currentPage === 'employees'}
-              onClick={() => setCurrentPage('employees')}
-            />
-            <NavItem 
-              label="Projects" 
-              icon="📁" 
-              active={currentPage === 'projects'}
-              onClick={() => setCurrentPage('projects')}
-            />
-            <NavItem 
-              label="Tasks" 
-              icon="✓" 
-              active={currentPage === 'tasks'}
-              onClick={() => setCurrentPage('tasks')}
-            />
-            <NavItem 
-              label="Reports" 
-              icon="📈" 
-              active={currentPage === 'reports'}
-              onClick={() => setCurrentPage('reports')}
-            />
-          </nav>
-          
-          <div style={styles.connectionStatus}>
-            <span style={styles.statusDot(isConnected)} />
-            {isConnected ? 'Connected' : 'Disconnected'}
+          <button 
+            className="mobile-menu-btn"
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            aria-label="Toggle menu"
+          >
+            {isMobileMenuOpen ? '✕' : '☰'}
+          </button>
+        </header>
+      )}
+
+      {/* Sidebar */}
+      <aside className={`sidebar ${isMobile ? 'mobile' : ''} ${isMobileMenuOpen ? 'open' : ''}`}>
+        {!isMobile && (
+          <div className="logo">
+            <h1>ArchTrack</h1>
+            <span>Admin</span>
           </div>
-        </aside>
+        )}
         
-        <main style={styles.main}>
-          {renderPage()}
-        </main>
-      </div>
-    </WebSocketProvider>
+        <nav className="nav">
+          <NavItem 
+            label="Dashboard" 
+            icon="📊" 
+            active={currentPage === 'dashboard'}
+            onClick={() => handleNavClick('dashboard')}
+          />
+          <NavItem 
+            label="Employees" 
+            icon="👥" 
+            active={currentPage === 'employees'}
+            onClick={() => handleNavClick('employees')}
+          />
+          <NavItem 
+            label="Projects" 
+            icon="📁" 
+            active={currentPage === 'projects'}
+            onClick={() => handleNavClick('projects')}
+          />
+          <NavItem 
+            label="Tasks" 
+            icon="✓" 
+            active={currentPage === 'tasks'}
+            onClick={() => handleNavClick('tasks')}
+          />
+          <NavItem 
+            label="Reports" 
+            icon="📈" 
+            active={currentPage === 'reports'}
+            onClick={() => handleNavClick('reports')}
+          />
+        </nav>
+        
+        <div className="connection-status">
+          <span className={`status-dot ${connectionStatus}`} />
+          {connectionStatus === 'loading' && 'Connecting...'}
+          {connectionStatus === 'connected' && 'Connected'}
+          {connectionStatus === 'disconnected' && 'Disconnected'}
+        </div>
+      </aside>
+
+      {/* Mobile Overlay */}
+      {isMobile && isMobileMenuOpen && (
+        <div 
+          className="mobile-overlay"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+      
+      <main className="main-content">
+        <Routes>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/employees" element={<Employees />} />
+          <Route path="/projects" element={<Projects />} />
+          <Route path="/tasks" element={<Tasks />} />
+          <Route path="/reports" element={<Reports />} />
+          <Route path="*" element={<Dashboard />} />
+        </Routes>
+      </main>
+    </div>
   );
 };
 
@@ -99,115 +161,22 @@ interface NavItemProps {
   onClick: () => void;
 }
 
-const NavItem: React.FC<NavItemProps> = ({ label, icon, active, onClick }) => {
-  const [isHovered, setIsHovered] = React.useState(false);
-  
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
-      style={{
-        ...styles.navItem,
-        ...(isHovered ? styles.navItemHover : {}),
-        ...(active ? styles.navItemActive : {})
-      }}
-    >
-      <span style={styles.navIcon}>{icon}</span>
-      <span style={styles.navLabel}>{label}</span>
-    </button>
-  );
-};
+const NavItem: React.FC<NavItemProps> = ({ label, icon, active, onClick }) => (
+  <button
+    onClick={onClick}
+    className={`nav-item ${active ? 'active' : ''}`}
+  >
+    <span className="nav-icon">{icon}</span>
+    <span className="nav-label">{label}</span>
+  </button>
+);
 
-const styles: { [key: string]: React.CSSProperties | any } = {
-  container: {
-    display: 'flex',
-    height: '100vh'
-  },
-  sidebar: {
-    width: '240px',
-    backgroundColor: '#2c3e50',
-    color: '#fff',
-    display: 'flex',
-    flexDirection: 'column'
-  },
-  logo: {
-    padding: '24px',
-    borderBottom: '1px solid rgba(255,255,255,0.1)'
-  },
-  logoText: {
-    fontSize: '24px',
-    fontWeight: 600,
-    margin: 0
-  },
-  logoSubtext: {
-    fontSize: '12px',
-    color: '#95a5a6',
-    textTransform: 'uppercase',
-    letterSpacing: '1px'
-  },
-  nav: {
-    flex: 1,
-    padding: '16px 0',
-    backgroundColor: 'transparent'
-  },
-  navItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    width: '100%',
-    padding: '12px 24px',
-    backgroundColor: 'transparent',
-    border: 'none',
-    borderLeft: '4px solid transparent',
-    color: '#ffffff',
-    fontSize: '15px',
-    fontWeight: 500,
-    cursor: 'pointer',
-    textAlign: 'left',
-    transition: 'all 0.2s'
-  },
-  navItemHover: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    color: '#ffffff'
-  },
-  navItemActive: {
-    backgroundColor: '#34495e',
-    color: '#fff',
-    borderLeft: '4px solid #3498db',
-    fontWeight: 600
-  },
-  navIcon: {
-    fontSize: '18px',
-    width: '24px',
-    textAlign: 'center',
-    flexShrink: 0
-  },
-  navLabel: {
-    display: 'inline-block',
-    whiteSpace: 'nowrap',
-    overflow: 'visible'
-  },
-  connectionStatus: {
-    padding: '16px 24px',
-    borderTop: '1px solid rgba(255,255,255,0.1)',
-    fontSize: '13px',
-    color: '#95a5a6',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px'
-  },
-  statusDot: (isConnected: boolean) => ({
-    width: '8px',
-    height: '8px',
-    borderRadius: '50%',
-    backgroundColor: isConnected ? '#27ae60' : '#e74c3c'
-  }),
-  main: {
-    flex: 1,
-    overflow: 'auto',
-    backgroundColor: '#f5f5f5'
-  }
-};
+const App: React.FC = () => (
+  <WebSocketProvider>
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
+  </WebSocketProvider>
+);
 
 export default App;

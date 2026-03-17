@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { Employee } from '@archtrack/shared';
+import type { Employee } from '../../../shared-types';
 
 export const Employees: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -112,45 +112,62 @@ export const Employees: React.FC = () => {
               {editingEmployee ? 'Edit Employee' : 'Add Employee'}
             </h2>
             <form onSubmit={handleSubmit} style={styles.form}>
-              <input
-                type="text"
-                placeholder="Name"
-                value={formData.name}
-                onChange={e => setFormData({...formData, name: e.target.value})}
-                style={styles.input}
-                required
-              />
-              <input
-                type="email"
-                placeholder="Email"
-                value={formData.email}
-                onChange={e => setFormData({...formData, email: e.target.value})}
-                style={styles.input}
-                required
-              />
-              <select
-                value={formData.role}
-                onChange={e => setFormData({...formData, role: e.target.value})}
-                style={styles.input}
-              >
-                <option value="employee">Employee</option>
-                <option value="manager">Manager</option>
-                <option value="admin">Admin</option>
-              </select>
-              <input
-                type="text"
-                placeholder="Department"
-                value={formData.department}
-                onChange={e => setFormData({...formData, department: e.target.value})}
-                style={styles.input}
-              />
-              <input
-                type="number"
-                placeholder="Hourly Rate"
-                value={formData.hourlyRate}
-                onChange={e => setFormData({...formData, hourlyRate: e.target.value})}
-                style={styles.input}
-              />
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Name *</label>
+                <input
+                  type="text"
+                  placeholder="e.g. John Smith"
+                  value={formData.name}
+                  onChange={e => setFormData({...formData, name: e.target.value})}
+                  style={styles.input}
+                  required
+                />
+              </div>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Email *</label>
+                <input
+                  type="email"
+                  placeholder="e.g. john@company.com"
+                  value={formData.email}
+                  onChange={e => setFormData({...formData, email: e.target.value})}
+                  style={styles.input}
+                  required
+                />
+              </div>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Role</label>
+                <select
+                  value={formData.role}
+                  onChange={e => setFormData({...formData, role: e.target.value})}
+                  style={styles.input}
+                >
+                  <option value="employee">Employee</option>
+                  <option value="manager">Manager</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Department</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Engineering"
+                  value={formData.department}
+                  onChange={e => setFormData({...formData, department: e.target.value})}
+                  style={styles.input}
+                />
+              </div>
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Hourly Rate ($)</label>
+                <input
+                  type="number"
+                  placeholder="e.g. 50"
+                  value={formData.hourlyRate}
+                  onChange={e => setFormData({...formData, hourlyRate: e.target.value})}
+                  style={styles.input}
+                  min="0"
+                  step="0.01"
+                />
+              </div>
               <div style={styles.formButtons}>
                 <button 
                   type="button" 
@@ -250,7 +267,17 @@ const styles: { [key: string]: React.CSSProperties | any } = {
   form: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px'
+    gap: '16px'
+  },
+  inputGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px'
+  },
+  label: {
+    fontSize: '13px',
+    fontWeight: 500,
+    color: '#555'
   },
   input: {
     padding: '12px',
