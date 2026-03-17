@@ -68,12 +68,32 @@ ArchTrack captures:
 
 All data stays local by default. Optional cloud sync for multi-location teams.
 
-## AI Features
+## AI Features (Genesis AI)
 
-Ask questions like:
+Natural language chat interface for productivity analytics. Ask questions like:
+
+**Employee Performance:**
+- "Who's slacking off?" — Find low productivity employees
+- "Who's working overtime?" — Detect burnout risk
+- "Who are my top performers?" — Rank by productivity score
+- "How is Sarah doing today?" — Daily status check
+- "What can Ahmed do better?" — Personalized improvement tips
+
+**Time & Activity Analysis:**
 - "What did Sarah work on yesterday?"
 - "Who spent the most time in meetings this week?"
+- "Who spends the most time on non-work stuff?"
+- "Time spent on YouTube by employee"
+
+**Team Management:**
+- "Who has capacity for a new project?" — Find available bandwidth
+- "Who's burning out?" — Long hours + low productivity detection
 - "Show me repetitive tasks that could be automated"
+
+**Smart Formatting:**
+- Bold text, bullet points, and numbered lists
+- Emoji indicators (🥇🥈🥉 for rankings, 🔴🟠🟡 for alerts)
+- Actionable suggestions after every response
 
 Automatically identifies:
 - Copy-paste workflows
@@ -94,12 +114,23 @@ Ranks detected patterns by:
 - **Remote teams** — Visibility without micromanagement
 - **Consulting** — Automated timesheet generation
 
+## Recent Updates
+
+### March 2026 — Genesis AI v2.0
+- ✅ **6 new query handlers** for architecture firm owners
+- ✅ **React Router** — Fixed navigation, proper URL routing
+- ✅ **Form labels** — Accessibility improvements
+- ✅ **Message formatting** — Bold, bullets, numbered lists
+- ✅ **Hover effects** — Better UI feedback
+
 ## Roadmap
 
 - [x] Core time tracking
 - [x] Productivity scoring
 - [x] Admin dashboard
-- [x] AI chat interface
+- [x] AI chat interface (Genesis AI)
+- [x] Natural language queries
+- [x] React Router navigation
 - [ ] Multi-location sync
 - [ ] Mobile companion app
 - [ ] Payroll integrations
