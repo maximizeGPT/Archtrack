@@ -184,10 +184,14 @@
   .app-container {
     flex-direction: column;
     padding-top: 56px; /* Space for mobile header */
+    height: 100vh;
+    overflow: hidden;
   }
 
   .mobile-header {
     display: flex;
+    height: 56px;
+    padding: 0 16px;
   }
 
   .sidebar.mobile {
@@ -195,10 +199,11 @@
     top: 56px;
     left: 0;
     bottom: 0;
-    width: 260px;
+    width: 280px;
     z-index: 999;
     transform: translateX(-100%);
-    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
+    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.3);
+    transition: transform 0.3s ease;
   }
 
   .sidebar.mobile.open {
@@ -207,19 +212,43 @@
 
   .mobile-overlay {
     display: block;
+    z-index: 998;
   }
 
   .main-content {
-    padding: 16px;
+    padding: 12px;
+    padding-bottom: 80px; /* Space for Genesis AI button */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
   }
 
   .nav-item {
-    padding: 16px 20px;
-    font-size: 16px;
+    padding: 14px 20px;
+    font-size: 15px;
   }
 
   .nav-icon {
     font-size: 20px;
+  }
+
+  .logo {
+    padding: 20px;
+  }
+
+  .logo h1 {
+    font-size: 22px;
+  }
+
+  .connection-status {
+    padding: 12px 20px;
+    font-size: 12px;
+  }
+
+  /* Fix for iOS safe areas */
+  @supports (padding-bottom: env(safe-area-inset-bottom)) {
+    .main-content {
+      padding-bottom: calc(12px + env(safe-area-inset-bottom) + 60px);
+    }
   }
 }
 
@@ -243,6 +272,126 @@
 @media (min-width: 1400px) {
   .main-content {
     padding: 32px;
+  }
+}
+
+/* Global Mobile Improvements */
+@media (max-width: 767px) {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    line-height: 1.3;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  h2 {
+    font-size: 20px;
+  }
+
+  h3 {
+    font-size: 18px;
+  }
+
+  p {
+    margin-bottom: 12px;
+  }
+
+  button {
+    min-height: 44px; /* iOS touch target */
+    min-width: 44px;
+  }
+
+  input, select, textarea {
+    font-size: 16px; /* Prevents zoom on iOS */
+    min-height: 44px;
+  }
+
+  /* Card spacing on mobile */
+  .card, .metric-card, .employee-card {
+    margin-bottom: 12px;
+    padding: 16px;
+  }
+
+  /* Grid layouts on mobile */
+  .grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Table responsiveness */
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  table {
+    min-width: 600px;
+  }
+
+  /* Dashboard mobile fixes */
+  .main-content > div {
+    padding: 0 !important;
+  }
+
+  .main-content h1 {
+    font-size: 24px;
+    margin-bottom: 8px;
+  }
+
+  .main-content h2 {
+    font-size: 18px;
+    margin-bottom: 12px;
+  }
+
+  /* Override Dashboard inline styles on mobile */
+  [style*="padding: 32px"] {
+    padding: 16px !important;
+  }
+
+  [style*="padding: 24px"] {
+    padding: 16px !important;
+  }
+
+  [style*="gap: 24px"] {
+    gap: 12px !important;
+  }
+
+  [style*="gap: 16px"] {
+    gap: 12px !important;
+  }
+
+  [style*="margin-bottom: 24px"] {
+    margin-bottom: 16px !important;
+  }
+
+  /* Stats grid on mobile */
+  [style*="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr))"] {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Employee grid on mobile */
+  [style*="grid-template-columns: repeat(auto-fill, minmax(300px, 1fr))"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Breakdown grid on mobile */
+  [style*="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr))"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Activity feed on mobile */
+  [style*="max-height: 400px"] {
+    max-height: 300px !important;
   }
 }
 

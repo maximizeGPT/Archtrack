@@ -68,7 +68,24 @@ interface AppRule {
   exceptions?: string[];
 }
 
+// FIX: System processes that should NEVER be tracked as suspicious
+export const SYSTEM_PROCESSES_TO_IGNORE = [
+  'loginwindow', 'window server', 'kernel', 'system', 'login window',
+  'screen saver', 'screensaver', 'lockscreen', 'lock screen',
+  'securityagent', 'authorizationhost'
+];
+
 export const APP_CLASSIFICATION_RULES: AppRule[] = [
+  // System/Break - Always mark as idle, never suspicious
+  {
+    patterns: [
+      'loginwindow', 'window server', 'kernel', 'system', 'login window',
+      'screen saver', 'screensaver', 'lockscreen', 'lock screen',
+      'securityagent', 'authorizationhost'
+    ],
+    category: 'break_idle'
+  },
+
   // Core Work Tools (generic - covers many professions)
   {
     patterns: [
@@ -155,11 +172,11 @@ export const APP_CLASSIFICATION_RULES: AppRule[] = [
     category: 'shopping_personal'
   },
 
-  // System/Browser (neutral)
+  // System apps (neutral) - NOTE: Browsers are handled separately above with work indicator detection
   {
     patterns: [
       'finder', 'explorer', 'desktop', 'system preferences', 'settings',
-      'chrome', 'safari', 'firefox', 'edge', 'new tab', 'google search',
+      'new tab', 'google search',
     ],
     category: 'other'
   }
@@ -176,8 +193,8 @@ export const SUSPICIOUS_THRESHOLDS = {
   videoIdleMinutes: 15,
   communicationGhostMinutes: 10,
   rapidSwitchSeconds: 3,
-  idleThresholdMinutes: 5,
-  sameWindowMinutes: 30,
+  idleThresholdMinutes: 15,  // Changed from 5 to 15 minutes - more reasonable for focused work
+  sameWindowMinutes: 60,     // Changed from 30 to 60 minutes - reading docs/videos can take time
 };
 
 // Main classification function
@@ -200,19 +217,29 @@ export function classifyActivity(
   let category: ActivityCategory = 'other';
   let isIdle = false;
 
+  // EXCLUDE idle/loginwindow from suspicious detection - these are system states, not employee actions
+  const systemIdleApps = ['idle', 'loginwindow', 'lockscreen', 'screensaver', 'window server'];
+  const isSystemIdle = systemIdleApps.some(app => appLower.includes(app) || titleLower.includes(app));
+
+  if (isSystemIdle) {
+    return {
+      category: 'break_idle',
+      categoryName: CATEGORY_NAMES['break_idle'],
+      productivityScore: 0,
+      productivityLevel: 'idle',
+      isSuspicious: false, // Never mark system idle as suspicious
+      suspiciousReason: undefined,
+      isIdle: true
+    };
+  }
+
   // SPECIAL CASE: Check window title FIRST for work indicators in browsers
   // This ensures "mission-control" in a Chrome tab gets classified as Core Work
   const browserApps = ['chrome', 'safari', 'firefox', 'edge', 'brave', 'opera'];
   const isBrowser = browserApps.some(b => appLower.includes(b));
 
   if (isBrowser) {
-    // EMPLOYEE-SPECIFIC CONTEXT: Safari on this Mac mini is dedicated OpenClaw work
-    // Since Safari window titles show as "Untitled" due to macOS permissions,
-    // we classify all Safari as Core Work for this employee
-    if (appLower.includes('safari')) {
-      category = 'core_work';
-    } else {
-      const workIndicators = [
+    const workIndicators = [
         'openclaw', 'mission-control', 'debug', 'debugger', 'codex',
         'github', 'gitlab', 'bitbucket', 'stackoverflow',
         'docker', 'kubernetes', 'terminal', 'console',
@@ -226,23 +253,22 @@ export function classifyActivity(
         titleLower.includes(indicator)
       );
 
-      if (hasWorkIndicator) {
-        category = 'core_work';
-      } else {
-        // Check for research/learning indicators
-        const researchIndicators = [
-          'documentation', 'docs.', 'readme', 'tutorial', 'how to',
-          'wikipedia', 'confluence', 'notion', 'obsidian',
-          'stackoverflow', 'github.com', 'gitlab.com'
-        ];
+    if (hasWorkIndicator) {
+      category = 'core_work';
+    } else {
+      // Check for research/learning indicators
+      const researchIndicators = [
+        'documentation', 'docs.', 'readme', 'tutorial', 'how to',
+        'wikipedia', 'confluence', 'notion', 'obsidian',
+        'stackoverflow', 'github.com', 'gitlab.com'
+      ];
 
-        const hasResearchIndicator = researchIndicators.some(indicator =>
-          titleLower.includes(indicator)
-        );
+      const hasResearchIndicator = researchIndicators.some(indicator =>
+        titleLower.includes(indicator)
+      );
 
-        if (hasResearchIndicator) {
-          category = 'research_learning';
-        }
+      if (hasResearchIndicator) {
+        category = 'research_learning';
       }
     }
   }
@@ -277,7 +303,12 @@ export function classifyActivity(
   let isSuspicious = false;
   let suspiciousReason: string | undefined;
 
-  if (context) {
+  // FIX: Never mark system processes as suspicious
+  const isSystemProcess = SYSTEM_PROCESSES_TO_IGNORE.some(proc => 
+    appLower.includes(proc) || titleLower.includes(proc)
+  );
+
+  if (context && !isSystemProcess) {
     // Video Idle Trick
     if (category === 'entertainment' && context.isVideoPlaying) {
       if (!context.hasInputActivity || (context.lastInputMinutesAgo && context.lastInputMinutesAgo > 5)) {

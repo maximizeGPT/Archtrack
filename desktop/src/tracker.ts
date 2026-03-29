@@ -2,6 +2,7 @@ import { powerMonitor, ipcMain } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import { app } from 'electron';
+import { getServerUrl, ARCHTRACK_CONFIG } from './config.js';
 import {
   classifyActivity,
   calculateTrueProductivity,
@@ -63,9 +64,9 @@ let consecutiveIdleChecks = 0;
 
 // Store config (simple JSON file)
 let config: Config = {
-  employeeId: 'emp-001',
-  employeeName: 'Test Employee',
-  serverUrl: 'http://localhost:3001'
+  employeeId: ARCHTRACK_CONFIG.defaults.employeeId,
+  employeeName: ARCHTRACK_CONFIG.defaults.employeeName,
+  serverUrl: getServerUrl()
 };
 
 export async function startTracking(): Promise<void> {
@@ -149,11 +150,26 @@ async function checkActivity(): Promise<void> {
       return; // Skip recording this cycle
     }
 
-    // FIX: Skip recording if user has been idle for more than 2 minutes
+    // FIX: Skip system processes that shouldn't be tracked as employee activity
+    const systemProcesses = [
+      'loginwindow', 'window server', 'kernel', 'system', 'login window',
+      'screen saver', 'screensaver', 'lockscreen', 'lock screen'
+    ];
+    const isSystemProcess = systemProcesses.some(proc => 
+      appName.toLowerCase().includes(proc) || windowTitle.toLowerCase().includes(proc)
+    );
+    
+    if (isSystemProcess) {
+      // Don't record system processes at all - they're not employee activity
+      return;
+    }
+
+    // FIX: Skip recording if user has been idle for more than 5 minutes
     // This prevents tracking background apps when user is away
-    if (idleTimeSec > 120) {
-      // Only record an idle entry if we haven't already
-      if (!lastActivity || !lastActivity.isIdle) {
+    // Changed from 2 minutes to 5 minutes to avoid excessive idle entries
+    if (idleTimeSec > 300) {
+      // Only record an idle entry once per idle session (not every 10 seconds)
+      if (!lastActivity || !lastActivity.isIdle || lastActivity.appName !== 'Idle') {
         const idleActivity: TrackedActivity = {
           id: generateId(),
           timestamp: new Date().toISOString(),
@@ -232,22 +248,22 @@ async function checkActivity(): Promise<void> {
       hasInputActivity
     };
 
-    // FIX: Only record activity if:
-    // 1. User has had input activity in the last 3 seconds (actively using the app)
-    // 2. OR the window/app has actually changed
-    // 3. OR it's been 60 seconds since last check
-    // This prevents tracking background apps that happen to be "active" but user isn't interacting with
-    const hasRecentInput = idleTimeSec < 3;
+    // FIX: Record activity if:
+    // 1. Window/app has changed (user switched apps)
+    // 2. OR it's been 60 seconds since last recorded activity (periodic heartbeat)
+    // 3. OR the activity is suspicious (always record these)
+    // 4. AND user is not idle for more than 30 seconds (prevents tracking when AFK)
+    // This ensures we capture all meaningful activity without spamming
     const windowChanged = !lastActivity || 
       lastActivity.appName !== activity.appName || 
       lastActivity.windowTitle !== activity.windowTitle;
-    const significantTimePassed = timeSinceLastCheck >= 60;
+    const significantTimePassed = !lastActivity || 
+      (Date.now() - new Date(lastActivity.timestamp).getTime()) >= 60000;
+    const isUserActive = idleTimeSec < 30; // User has interacted within last 30 seconds
     
-    const shouldRecord = windowChanged && hasRecentInput || 
-                         classification.isSuspicious || 
-                         significantTimePassed;
+    const shouldRecord = (windowChanged || significantTimePassed || classification.isSuspicious) && isUserActive;
 
-    if (shouldRecord && hasRecentInput) {
+    if (shouldRecord) {
       activities.push(activity);
       offlineQueue.push(activity);
       lastActivity = activity;

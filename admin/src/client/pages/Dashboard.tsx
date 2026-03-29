@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useWebSocket } from '../contexts/WebSocketContext';
-import type { Employee } from '@archtrack/shared';
+
+import type { Employee } from '../../../shared-types';
 
 interface Activity {
   id: string;
@@ -56,6 +57,7 @@ export const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { onlineEmployees, recentActivity: _recentActivity } = useWebSocket();
 
   useEffect(() => {
@@ -66,25 +68,46 @@ export const Dashboard: React.FC = () => {
 
   const loadData = async () => {
     try {
+      setError(null);
       const [statsRes, employeesRes] = await Promise.all([
         fetch('/api/dashboard/stats'),
         fetch('/api/employees')
       ]);
+
+      if (!statsRes.ok || !employeesRes.ok) {
+        throw new Error('Failed to fetch dashboard data');
+      }
 
       const statsData = await statsRes.json();
       const employeesData = await employeesRes.json();
 
       if (statsData.success) setStats(statsData.data);
       if (employeesData.success) setEmployees(employeesData.data);
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
+    } catch (err) {
+      console.error('Error loading dashboard data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
     } finally {
       setLoading(false);
     }
   };
 
   if (loading) {
-    return <div style={styles.loading}>Loading...</div>;
+    return <DashboardSkeleton />;
+  }
+
+  if (error) {
+    return (
+      <div style={styles.container}>
+        <div style={errorStyles.container}>
+          <div style={errorStyles.icon}>⚠️</div>
+          <h2 style={errorStyles.title}>Failed to Load Dashboard</h2>
+          <p style={errorStyles.message}>{error}</p>
+          <button onClick={loadData} style={errorStyles.retryButton}>
+            Retry
+          </button>
+        </div>
+      </div>
+    );
   }
 
   const getProductivityColor = (score: number) => {
@@ -128,21 +151,13 @@ export const Dashboard: React.FC = () => {
           />
           <StatCard
             title="Focus Time Today"
-            value={(() => {
-              const minutes = stats?.focusTimeMinutes || 0;
-              if (minutes < 60) return `${minutes}m`;
-              return `${Math.round(minutes / 60 * 10) / 10}h`;
-            })()}
+            value={`${Math.round((stats?.focusTimeMinutes || 0) / 60)}h`}
             icon="🎯"
             color="#27ae60"
           />
           <StatCard
             title="Idle/Wasted Time"
-            value={(() => {
-              const minutes = stats?.distractedTimeMinutes || 0;
-              if (minutes < 60) return `${minutes}m`;
-              return `${Math.round(minutes / 60 * 10) / 10}h`;
-            })()}
+            value={`${Math.round((stats?.distractedTimeMinutes || 0) / 60)}h`}
             icon="💤"
             color="#e74c3c"
           />
@@ -317,6 +332,7 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
         )}
+
       </div>
     </div>
   );
@@ -356,6 +372,42 @@ const BreakdownItem: React.FC<BreakdownItemProps> = ({ label, minutes, color }) 
       <div style={styles.breakdownValue}>{hours}h</div>
     </div>
   );
+};
+
+const errorStyles: { [key: string]: React.CSSProperties } = {
+  container: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px',
+    textAlign: 'center'
+  },
+  icon: {
+    fontSize: '48px',
+    marginBottom: '16px'
+  },
+  title: {
+    fontSize: '24px',
+    fontWeight: 600,
+    color: '#e74c3c',
+    marginBottom: '8px'
+  },
+  message: {
+    fontSize: '16px',
+    color: '#7f8c8d',
+    marginBottom: '24px'
+  },
+  retryButton: {
+    padding: '12px 24px',
+    backgroundColor: '#3498db',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: 500,
+    cursor: 'pointer'
+  }
 };
 
 const styles: { [key: string]: React.CSSProperties | any } = {
@@ -661,5 +713,119 @@ const styles: { [key: string]: React.CSSProperties | any } = {
     color: '#95a5a6',
     textAlign: 'center',
     padding: '20px'
+  }
+};
+
+// Loading Skeleton Component
+const DashboardSkeleton: React.FC = () => (
+  <div style={skeletonStyles.container}>
+    <div style={skeletonStyles.header}>
+      <div style={skeletonStyles.title} />
+      <div style={skeletonStyles.subtitle} />
+    </div>
+    <div style={skeletonStyles.statsGrid}>
+      {[1, 2, 3, 4].map(i => (
+        <div key={i} style={skeletonStyles.statCard}>
+          <div style={skeletonStyles.statIcon} />
+          <div style={skeletonStyles.statValue} />
+          <div style={skeletonStyles.statLabel} />
+        </div>
+      ))}
+    </div>
+    <div style={skeletonStyles.contentGrid}>
+      <div style={skeletonStyles.card}>
+        <div style={skeletonStyles.cardTitle} />
+        <div style={skeletonStyles.cardContent} />
+      </div>
+      <div style={skeletonStyles.card}>
+        <div style={skeletonStyles.cardTitle} />
+        <div style={skeletonStyles.cardContent} />
+      </div>
+    </div>
+  </div>
+);
+
+const skeletonStyles: { [key: string]: React.CSSProperties } = {
+  container: {
+    padding: '24px',
+    animation: 'fadeIn 0.3s ease'
+  },
+  header: {
+    marginBottom: '24px'
+  },
+  title: {
+    height: '32px',
+    width: '200px',
+    backgroundColor: '#e0e0e0',
+    borderRadius: '4px',
+    marginBottom: '8px',
+    animation: 'pulse 1.5s infinite'
+  },
+  subtitle: {
+    height: '16px',
+    width: '300px',
+    backgroundColor: '#e0e0e0',
+    borderRadius: '4px',
+    animation: 'pulse 1.5s infinite'
+  },
+  statsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+    gap: '16px',
+    marginBottom: '24px'
+  },
+  statCard: {
+    backgroundColor: '#fff',
+    padding: '20px',
+    borderRadius: '8px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+  },
+  statIcon: {
+    width: '40px',
+    height: '40px',
+    backgroundColor: '#e0e0e0',
+    borderRadius: '8px',
+    marginBottom: '12px',
+    animation: 'pulse 1.5s infinite'
+  },
+  statValue: {
+    height: '28px',
+    width: '80px',
+    backgroundColor: '#e0e0e0',
+    borderRadius: '4px',
+    marginBottom: '8px',
+    animation: 'pulse 1.5s infinite'
+  },
+  statLabel: {
+    height: '14px',
+    width: '120px',
+    backgroundColor: '#e0e0e0',
+    borderRadius: '4px',
+    animation: 'pulse 1.5s infinite'
+  },
+  contentGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
+    gap: '24px'
+  },
+  card: {
+    backgroundColor: '#fff',
+    padding: '20px',
+    borderRadius: '8px',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+  },
+  cardTitle: {
+    height: '20px',
+    width: '150px',
+    backgroundColor: '#e0e0e0',
+    borderRadius: '4px',
+    marginBottom: '16px',
+    animation: 'pulse 1.5s infinite'
+  },
+  cardContent: {
+    height: '200px',
+    backgroundColor: '#e0e0e0',
+    borderRadius: '4px',
+    animation: 'pulse 1.5s infinite'
   }
 };

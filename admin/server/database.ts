@@ -3,7 +3,7 @@ import { open, Database } from 'sqlite';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import type { Employee, Project, Task, TimeEntry, Activity, ProductivityReport } from '@archtrack/shared';
+import type { Employee, Project, Task, TimeEntry, Activity, ProductivityReport } from '../shared-types.js';
 
 // ES module compatibility
 const __filename = fileURLToPath(import.meta.url);
@@ -390,6 +390,37 @@ export async function createActivity(activity: Activity): Promise<void> {
   );
 }
 
+export async function getActivityById(id: string): Promise<Activity | null> {
+  const db = getDatabase();
+  const row = await db.get('SELECT * FROM activities WHERE id = ?', id);
+  return row ? mapActivity(row) : null;
+}
+
+export async function updateActivity(id: string, updates: Partial<Activity>): Promise<void> {
+  const db = getDatabase();
+  const now = new Date().toISOString();
+
+  const sets: string[] = [];
+  const values: any[] = [];
+
+  if (updates.appName) { sets.push('app_name = ?'); values.push(updates.appName); }
+  if (updates.windowTitle) { sets.push('window_title = ?'); values.push(updates.windowTitle); }
+  if (updates.category) { sets.push('category = ?'); values.push(updates.category); }
+  if (updates.categoryName) { sets.push('category_name = ?'); values.push(updates.categoryName); }
+  if (updates.productivityScore !== undefined) { sets.push('productivity_score = ?'); values.push(updates.productivityScore); }
+  if (updates.productivityLevel) { sets.push('productivity_level = ?'); values.push(updates.productivityLevel); }
+  if (updates.isSuspicious !== undefined) { sets.push('is_suspicious = ?'); values.push(updates.isSuspicious ? 1 : 0); }
+  if (updates.suspiciousReason) { sets.push('suspicious_reason = ?'); values.push(updates.suspiciousReason); }
+  if (updates.isIdle !== undefined) { sets.push('is_idle = ?'); values.push(updates.isIdle ? 1 : 0); }
+  if (updates.idleTimeSeconds !== undefined) { sets.push('idle_time_seconds = ?'); values.push(updates.idleTimeSeconds); }
+  if (updates.durationSeconds !== undefined) { sets.push('duration_seconds = ?'); values.push(updates.durationSeconds); }
+
+  sets.push('updated_at = ?'); values.push(now);
+  values.push(id);
+
+  await db.run(`UPDATE activities SET ${sets.join(', ')} WHERE id = ?`, values);
+}
+
 export async function getActivitiesByEmployee(
   employeeId: string, 
   startDate?: string, 
@@ -404,10 +435,8 @@ export async function getActivitiesByEmployee(
     params.push(startDate);
   }
   if (endDate) {
-    // FIX: Use end of day (23:59:59) instead of start of day (00:00:00)
-    const endOfDay = endDate + 'T23:59:59.999Z';
     query += ' AND timestamp <= ?';
-    params.push(endOfDay);
+    params.push(endDate);
   }
   
   query += ' ORDER BY timestamp DESC';
@@ -441,7 +470,11 @@ export async function getAllActivities(startDate?: string, endDate?: string): Pr
 
 export async function getSuspiciousActivities(employeeId?: string, limit: number = 50): Promise<Activity[]> {
   const db = getDatabase();
-  let query = 'SELECT * FROM activities WHERE is_suspicious = 1';
+  // Filter out system/idle apps that shouldn't be marked as suspicious
+  const systemApps = ['loginwindow', 'lockscreen', 'screensaver', 'window server', 'idle'];
+  const appExclusions = systemApps.map(app => `LOWER(app_name) != '${app}'`).join(' AND ');
+  
+  let query = `SELECT * FROM activities WHERE is_suspicious = 1 AND ${appExclusions}`;
   const params: any[] = [];
   
   if (employeeId) {
@@ -628,7 +661,7 @@ function mapTimeEntry(row: any): TimeEntry {
   };
 }
 
-// Dashboard stats
+// Dashboard stats with timeout protection
 export async function getDashboardStats(): Promise<any> {
   const db = getDatabase();
   
@@ -644,34 +677,34 @@ export async function getDashboardStats(): Promise<any> {
   monthAgo.setMonth(monthAgo.getMonth() - 1);
   const monthAgoStr = monthAgo.toISOString();
 
-  const [totalEmployees, activeProjects, todayHours, weekHours, monthHours, recentActivities, suspiciousActivities, productivityStats] = await Promise.all([
-    db.get('SELECT COUNT(*) as count FROM employees WHERE is_active = 1'),
-    db.get('SELECT COUNT(*) as count FROM projects WHERE status = "active"'),
-    db.get('SELECT COALESCE(SUM(duration), 0) as total FROM time_entries WHERE start_time >= ?', todayStr),
-    db.get('SELECT COALESCE(SUM(duration), 0) as total FROM time_entries WHERE start_time >= ?', weekAgoStr),
-    db.get('SELECT COALESCE(SUM(duration), 0) as total FROM time_entries WHERE start_time >= ?', monthAgoStr),
-    db.all('SELECT * FROM activities ORDER BY timestamp DESC LIMIT 20'),
-    db.all('SELECT * FROM activities WHERE timestamp >= ? AND is_suspicious = 1 ORDER BY timestamp DESC LIMIT 50', todayStr),
-    db.all(`
+  // Helper to add timeout to promises
+  const withTimeout = <T>(promise: Promise<T>, ms: number, defaultValue: T): Promise<T> => {
+    return Promise.race([
+      promise,
+      new Promise<T>((_, reject) => 
+        setTimeout(() => reject(new Error(`Query timeout after ${ms}ms`)), ms)
+      )
+    ]).catch(err => {
+      console.warn('Dashboard stats query failed:', err.message);
+      return defaultValue;
+    });
+  };
+
+  const [totalEmployees, activeProjects, todayHours, weekHours, monthHours, recentActivities, suspiciousCount, productivityStats] = await Promise.all([
+    withTimeout(db.get('SELECT COUNT(*) as count FROM employees WHERE is_active = 1'), 5000, { count: 0 }),
+    withTimeout(db.get('SELECT COUNT(*) as count FROM projects WHERE status = "active"'), 5000, { count: 0 }),
+    withTimeout(db.get('SELECT COALESCE(SUM(duration_seconds), 0) as total FROM activities WHERE timestamp >= ?', todayStr), 5000, { total: 0 }),
+    withTimeout(db.get('SELECT COALESCE(SUM(duration_seconds), 0) as total FROM activities WHERE timestamp >= ?', weekAgoStr), 5000, { total: 0 }),
+    withTimeout(db.get('SELECT COALESCE(SUM(duration_seconds), 0) as total FROM activities WHERE timestamp >= ?', monthAgoStr), 5000, { total: 0 }),
+    withTimeout(db.all('SELECT * FROM activities ORDER BY timestamp DESC LIMIT 20'), 5000, []),
+    withTimeout(db.get('SELECT COUNT(*) as count FROM activities WHERE timestamp >= ? AND is_suspicious = 1', todayStr), 5000, { count: 0 }),
+    withTimeout(db.all(`
       SELECT category, SUM(duration_seconds) as total_seconds 
       FROM activities 
       WHERE timestamp >= ? 
       GROUP BY category
-    `, todayStr)
+    `, todayStr), 5000, [])
   ]);
-  
-  // FIX: Count ALL suspicious activities including idle time
-  // Idle time IS suspicious activity (employee away from desk)
-  const uniqueSuspiciousCount = suspiciousActivities.length;
-
-  // FIX: Calculate actual time from unique app switches, not summed duration_seconds
-  // Get unique activity periods (when app/window changes)
-  const uniqueActivities = await db.all(
-    `SELECT * FROM activities 
-     WHERE timestamp >= ? 
-     ORDER BY timestamp ASC`,
-    todayStr
-  );
 
   // Build productivity breakdown with new universal categories
   const productivityBreakdown: Record<string, number> = {
@@ -686,103 +719,80 @@ export async function getDashboardStats(): Promise<any> {
     other: 0
   };
 
-  // FIX: Calculate breakdown from uniqueActivities (actual time) not productivityStats
-  for (let i = 0; i < uniqueActivities.length; i++) {
-    const current = uniqueActivities[i];
-    const next = uniqueActivities[i + 1];
-    
-    // Calculate duration until next activity or cap at 10 minutes
-    let durationMinutes = 0.17; // default 10 seconds = 0.17 minutes
-    if (next) {
-      const currentTime = new Date(current.timestamp).getTime();
-      const nextTime = new Date(next.timestamp).getTime();
-      durationMinutes = Math.min((nextTime - currentTime) / 1000 / 60, 10); // cap at 10 minutes
-    }
-    
-    switch (current.category) {
+  for (const stat of productivityStats) {
+    const minutes = Math.round(stat.total_seconds / 60);
+    switch (stat.category) {
       case 'core_work':
-        productivityBreakdown.coreWork += durationMinutes;
+        productivityBreakdown.coreWork += minutes;
         break;
       case 'communication':
-        productivityBreakdown.communication += durationMinutes;
+        productivityBreakdown.communication += minutes;
         break;
       case 'research_learning':
-        productivityBreakdown.researchLearning += durationMinutes;
+        productivityBreakdown.researchLearning += minutes;
         break;
       case 'planning_docs':
-        productivityBreakdown.planningDocs += durationMinutes;
+        productivityBreakdown.planningDocs += minutes;
         break;
       case 'break_idle':
-        productivityBreakdown.breakIdle += durationMinutes;
+        productivityBreakdown.breakIdle += minutes;
         break;
       case 'entertainment':
-        productivityBreakdown.entertainment += durationMinutes;
+        productivityBreakdown.entertainment += minutes;
         break;
       case 'social_media':
-        productivityBreakdown.socialMedia += durationMinutes;
+        productivityBreakdown.socialMedia += minutes;
         break;
       case 'shopping_personal':
-        productivityBreakdown.shoppingPersonal += durationMinutes;
+        productivityBreakdown.shoppingPersonal += minutes;
         break;
       default:
-        productivityBreakdown.other += durationMinutes;
+        productivityBreakdown.other += minutes;
     }
   }
-  
-  // Calculate actual time by looking at time between unique activity changes
-  let actualTotalSeconds = 0;
-  let actualProductiveSeconds = 0;
-  let actualUnproductiveSeconds = 0;
-  let actualIdleSeconds = 0;
-  
-  for (let i = 0; i < uniqueActivities.length; i++) {
-    const current = uniqueActivities[i];
-    const next = uniqueActivities[i + 1];
-    
-    // Calculate duration until next activity or cap at 10 minutes
-    let duration = 10; // default 10 seconds
-    if (next) {
-      const currentTime = new Date(current.timestamp).getTime();
-      const nextTime = new Date(next.timestamp).getTime();
-      duration = Math.min((nextTime - currentTime) / 1000, 600); // cap at 10 minutes
-    }
-    
-    actualTotalSeconds += duration;
-    
-    if (current.productivity_level === 'productive' && !current.is_suspicious) {
-      actualProductiveSeconds += duration;
-    } else if (current.productivity_level === 'unproductive') {
-      actualUnproductiveSeconds += duration;
-    }
-    
-    // FIX: Count idle time as wasted time (includes break_idle category)
-    if (current.is_idle || current.productivity_level === 'idle') {
-      actualIdleSeconds += duration;
-    }
-  }
-  
-  // Calculate average productivity score from unique activities only
-  const avgScore = uniqueActivities.length > 0 
-    ? Math.round(uniqueActivities.reduce((sum: number, a: any) => sum + a.productivity_score, 0) / uniqueActivities.length)
-    : 0;
 
-  // Get employee activity stats
-  const employeeActivity = await getEmployeeActivityStats();
+  // Calculate average productivity score (with timeout)
+  const avgScore = await withTimeout(
+    db.get('SELECT AVG(productivity_score) as score FROM activities WHERE timestamp >= ?', todayStr),
+    5000,
+    { score: 0 }
+  );
 
-  // FIX: Include idle time in distracted/wasted time
-  const totalWastedMinutes = Math.round((actualUnproductiveSeconds + actualIdleSeconds) / 60);
+  // Calculate focus vs distracted time (with timeout)
+  const focusTime = await withTimeout(
+    db.get(`SELECT COALESCE(SUM(duration_seconds), 0) as total 
+     FROM activities 
+     WHERE timestamp >= ? AND productivity_level = 'productive' AND is_suspicious = 0`, todayStr),
+    5000,
+    { total: 0 }
+  );
+
+  const distractedTime = await withTimeout(
+    db.get(`SELECT COALESCE(SUM(duration_seconds), 0) as total 
+     FROM activities 
+     WHERE timestamp >= ? AND (productivity_level = 'unproductive' OR is_suspicious = 1)`, todayStr),
+    5000,
+    { total: 0 }
+  );
+
+  // Get employee activity stats (with timeout)
+  const employeeActivity = await withTimeout(
+    getEmployeeActivityStats(),
+    5000,
+    []
+  );
 
   return {
     totalEmployees: totalEmployees.count,
     activeProjects: activeProjects.count,
-    totalHoursToday: Math.round(actualTotalSeconds / 3600 * 10) / 10,
+    totalHoursToday: Math.round(todayHours.total / 3600 * 10) / 10,
     totalHoursThisWeek: Math.round(weekHours.total / 3600 * 10) / 10,
     totalHoursThisMonth: Math.round(monthHours.total / 3600 * 10) / 10,
     productivityBreakdown,
-    averageProductivityScore: avgScore,
-    suspiciousActivityCount: uniqueSuspiciousCount,
-    focusTimeMinutes: Math.round(actualProductiveSeconds / 60),
-    distractedTimeMinutes: totalWastedMinutes,
+    averageProductivityScore: Math.round(avgScore?.score || 0),
+    suspiciousActivityCount: suspiciousCount.count,
+    focusTimeMinutes: Math.round(focusTime.total / 60),
+    distractedTimeMinutes: Math.round(distractedTime.total / 60),
     recentActivities: recentActivities.map(mapActivity),
     employeeActivity
   };
@@ -800,52 +810,33 @@ export async function getEmployeeActivityStats(): Promise<any[]> {
   
   const results = [];
   for (const emp of employees) {
-    // FIX: Get all activities for this employee today to calculate actual time
-    const empActivities = await db.all(
-      `SELECT * FROM activities 
-       WHERE employee_id = ? AND timestamp >= ? 
-       ORDER BY timestamp ASC`,
-      [emp.id, todayStr]
-    );
-    
-    const latestActivity = empActivities.length > 0 ? empActivities[empActivities.length - 1] : null;
-    
-    // FIX: Calculate actual time by looking at time between unique activity changes
-    let actualTotalSeconds = 0;
-    let totalScore = 0;
-    let suspiciousCount = 0;
-    
-    for (let i = 0; i < empActivities.length; i++) {
-      const current = empActivities[i];
-      const next = empActivities[i + 1];
-      
-      // Calculate duration until next activity or cap at 10 minutes
-      let duration = 10; // default 10 seconds
-      if (next) {
-        const currentTime = new Date(current.timestamp).getTime();
-        const nextTime = new Date(next.timestamp).getTime();
-        duration = Math.min((nextTime - currentTime) / 1000, 600); // cap at 10 minutes
-      }
-      
-      actualTotalSeconds += duration;
-      totalScore += current.productivity_score;
-      
-      // FIX: Count ALL suspicious activities including idle time
-      if (current.is_suspicious) {
-        suspiciousCount++;
-      }
-    }
-    
-    const avgScore = empActivities.length > 0 ? Math.round(totalScore / empActivities.length) : 0;
+    const [latestActivity, todayStats, suspiciousCount] = await Promise.all([
+      db.get(
+        'SELECT * FROM activities WHERE employee_id = ? ORDER BY timestamp DESC LIMIT 1',
+        emp.id
+      ),
+      db.get(
+        `SELECT 
+          COALESCE(SUM(duration_seconds), 0) as total_seconds,
+          AVG(productivity_score) as avg_score
+         FROM activities 
+         WHERE employee_id = ? AND timestamp >= ?`,
+        [emp.id, todayStr]
+      ),
+      db.get(
+        'SELECT COUNT(*) as count FROM activities WHERE employee_id = ? AND timestamp >= ? AND is_suspicious = 1',
+        [emp.id, todayStr]
+      )
+    ]);
     
     results.push({
       employeeId: emp.id,
       employeeName: emp.name,
       currentActivity: latestActivity?.window_title,
       currentCategory: latestActivity?.category_name,
-      productivityScore: avgScore,
-      hoursToday: Math.round(actualTotalSeconds / 3600 * 10) / 10,
-      suspiciousActivityCount: suspiciousCount
+      productivityScore: Math.round(todayStats?.avg_score || 0),
+      hoursToday: Math.round((todayStats?.total_seconds || 0) / 3600 * 10) / 10,
+      suspiciousActivityCount: suspiciousCount?.count || 0
     });
   }
   

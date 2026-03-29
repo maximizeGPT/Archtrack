@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: archtrack-admin
+    env: docker
+    plan: free
+    dockerfilePath: ./deployment/Dockerfile
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        generateValue: true
+    disk:
+      name: archtrack-data
+      mountPath: /data
+      sizeGB: 1

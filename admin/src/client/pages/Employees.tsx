@@ -4,6 +4,8 @@ import type { Employee } from '../../../shared-types';
 export const Employees: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [formData, setFormData] = useState({
@@ -20,13 +22,20 @@ export const Employees: React.FC = () => {
 
   const loadEmployees = async () => {
     try {
+      setError(null);
       const res = await fetch('/api/employees');
+      if (!res.ok) {
+        throw new Error(`Failed to load employees: ${res.status}`);
+      }
       const data = await res.json();
       if (data.success) {
         setEmployees(data.data);
+      } else {
+        throw new Error(data.error || 'Failed to load employees');
       }
-    } catch (error) {
-      console.error('Error loading employees:', error);
+    } catch (err) {
+      console.error('Error loading employees:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load employees');
     } finally {
       setLoading(false);
     }
@@ -34,13 +43,28 @@ export const Employees: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const url = editingEmployee 
+    setFormError(null);
+
+    // Validation
+    if (!formData.name.trim()) {
+      setFormError('Name is required');
+      return;
+    }
+    if (!formData.email.trim()) {
+      setFormError('Email is required');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      setFormError('Please enter a valid email address');
+      return;
+    }
+
+    const url = editingEmployee
       ? `/api/employees/${editingEmployee.id}`
       : '/api/employees';
-    
+
     const method = editingEmployee ? 'PUT' : 'POST';
-    
+
     try {
       const res = await fetch(url, {
         method,
@@ -50,15 +74,24 @@ export const Employees: React.FC = () => {
           hourlyRate: parseFloat(formData.hourlyRate) || 0
         })
       });
-      
-      if (res.ok) {
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to save employee: ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (data.success) {
         setShowForm(false);
         setEditingEmployee(null);
         setFormData({ name: '', email: '', role: 'employee', department: '', hourlyRate: '' });
         loadEmployees();
+      } else {
+        throw new Error(data.error || 'Failed to save employee');
       }
-    } catch (error) {
-      console.error('Error saving employee:', error);
+    } catch (err) {
+      console.error('Error saving employee:', err);
+      setFormError(err instanceof Error ? err.message : 'Failed to save employee');
     }
   };
 
@@ -76,17 +109,42 @@ export const Employees: React.FC = () => {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this employee?')) return;
-    
+
     try {
-      await fetch(`/api/employees/${id}`, { method: 'DELETE' });
-      loadEmployees();
-    } catch (error) {
-      console.error('Error deleting employee:', error);
+      const res = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to delete employee: ${res.status}`);
+      }
+      const data = await res.json();
+      if (data.success) {
+        loadEmployees();
+      } else {
+        throw new Error(data.error || 'Failed to delete employee');
+      }
+    } catch (err) {
+      console.error('Error deleting employee:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete employee');
     }
   };
 
   if (loading) {
     return <div style={styles.loading}>Loading...</div>;
+  }
+
+  if (error) {
+    return (
+      <div style={styles.container}>
+        <div style={errorStyles.container}>
+          <div style={errorStyles.icon}>⚠️</div>
+          <h2 style={errorStyles.title}>Error Loading Employees</h2>
+          <p style={errorStyles.message}>{error}</p>
+          <button onClick={loadEmployees} style={errorStyles.retryButton}>
+            Retry
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -106,12 +164,22 @@ export const Employees: React.FC = () => {
       </header>
 
       {showForm && (
-        <div style={styles.modal}>
+        <div
+          style={styles.modal}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-title"
+        >
           <div style={styles.modalContent}>
-            <h2 style={styles.modalTitle}>
+            <h2 id="modal-title" style={styles.modalTitle}>
               {editingEmployee ? 'Edit Employee' : 'Add Employee'}
             </h2>
             <form onSubmit={handleSubmit} style={styles.form}>
+              {formError && (
+                <div style={styles.errorBanner}>
+                  ⚠️ {formError}
+                </div>
+              )}
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Name *</label>
                 <input
@@ -212,6 +280,42 @@ export const Employees: React.FC = () => {
   );
 };
 
+const errorStyles: { [key: string]: React.CSSProperties } = {
+  container: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px',
+    textAlign: 'center'
+  },
+  icon: {
+    fontSize: '48px',
+    marginBottom: '16px'
+  },
+  title: {
+    fontSize: '24px',
+    fontWeight: 600,
+    color: '#e74c3c',
+    marginBottom: '8px'
+  },
+  message: {
+    fontSize: '16px',
+    color: '#7f8c8d',
+    marginBottom: '24px'
+  },
+  retryButton: {
+    padding: '12px 24px',
+    backgroundColor: '#3498db',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: 500,
+    cursor: 'pointer'
+  }
+};
+
 const styles: { [key: string]: React.CSSProperties | any } = {
   container: {
     padding: '32px'
@@ -219,6 +323,15 @@ const styles: { [key: string]: React.CSSProperties | any } = {
   loading: {
     padding: '40px',
     textAlign: 'center'
+  },
+  errorBanner: {
+    backgroundColor: '#fdf2f2',
+    border: '1px solid #fee2e2',
+    color: '#e74c3c',
+    padding: '12px 16px',
+    borderRadius: '8px',
+    marginBottom: '16px',
+    fontWeight: 500
   },
   header: {
     display: 'flex',

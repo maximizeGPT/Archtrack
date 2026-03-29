@@ -4,6 +4,8 @@ import type { Project } from '../../../shared-types';
 export const Projects: React.FC = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [formData, setFormData] = useState({
@@ -19,13 +21,20 @@ export const Projects: React.FC = () => {
 
   const loadProjects = async () => {
     try {
+      setError(null);
       const res = await fetch('/api/projects');
+      if (!res.ok) {
+        throw new Error(`Failed to load projects: ${res.status}`);
+      }
       const data = await res.json();
       if (data.success) {
         setProjects(data.data);
+      } else {
+        throw new Error(data.error || 'Failed to load projects');
       }
-    } catch (error) {
-      console.error('Error loading projects:', error);
+    } catch (err) {
+      console.error('Error loading projects:', err);
+      setError(err instanceof Error ? err.message : 'Failed to load projects');
     } finally {
       setLoading(false);
     }
@@ -33,13 +42,20 @@ export const Projects: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const url = editingProject 
+    setFormError(null);
+
+    // Validation
+    if (!formData.name.trim()) {
+      setFormError('Project name is required');
+      return;
+    }
+
+    const url = editingProject
       ? `/api/projects/${editingProject.id}`
       : '/api/projects';
-    
+
     const method = editingProject ? 'PUT' : 'POST';
-    
+
     try {
       const res = await fetch(url, {
         method,
@@ -49,15 +65,24 @@ export const Projects: React.FC = () => {
           budget: parseFloat(formData.budget) || 0
         })
       });
-      
-      if (res.ok) {
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to save project: ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (data.success) {
         setShowForm(false);
         setEditingProject(null);
         setFormData({ name: '', description: '', clientName: '', budget: '' });
         loadProjects();
+      } else {
+        throw new Error(data.error || 'Failed to save project');
       }
-    } catch (error) {
-      console.error('Error saving project:', error);
+    } catch (err) {
+      console.error('Error saving project:', err);
+      setFormError(err instanceof Error ? err.message : 'Failed to save project');
     }
   };
 
@@ -85,11 +110,26 @@ export const Projects: React.FC = () => {
     return <div style={styles.loading}>Loading...</div>;
   }
 
+  if (error) {
+    return (
+      <div style={styles.container}>
+        <div style={errorStyles.container}>
+          <div style={errorStyles.icon}>⚠️</div>
+          <h2 style={errorStyles.title}>Error Loading Projects</h2>
+          <p style={errorStyles.message}>{error}</p>
+          <button onClick={loadProjects} style={errorStyles.retryButton}>
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={styles.container}>
       <header style={styles.header}>
         <h1 style={styles.title}>Projects</h1>
-        <button 
+        <button
           style={styles.addButton}
           onClick={() => {
             setEditingProject(null);
@@ -102,12 +142,22 @@ export const Projects: React.FC = () => {
       </header>
 
       {showForm && (
-        <div style={styles.modal}>
+        <div
+          style={styles.modal}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-title"
+        >
           <div style={styles.modalContent}>
-            <h2 style={styles.modalTitle}>
+            <h2 id="modal-title" style={styles.modalTitle}>
               {editingProject ? 'Edit Project' : 'Add Project'}
             </h2>
             <form onSubmit={handleSubmit} style={styles.form}>
+              {formError && (
+                <div style={styles.errorBanner}>
+                  ⚠️ {formError}
+                </div>
+              )}
               <div style={styles.inputGroup}>
                 <label style={styles.label}>Project Name *</label>
                 <input
@@ -151,8 +201,8 @@ export const Projects: React.FC = () => {
                 />
               </div>
               <div style={styles.formButtons}>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setShowForm(false)}
                   style={styles.cancelButton}
                 >
@@ -202,6 +252,42 @@ export const Projects: React.FC = () => {
   );
 };
 
+const errorStyles: { [key: string]: React.CSSProperties } = {
+  container: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px',
+    textAlign: 'center'
+  },
+  icon: {
+    fontSize: '48px',
+    marginBottom: '16px'
+  },
+  title: {
+    fontSize: '24px',
+    fontWeight: 600,
+    color: '#e74c3c',
+    marginBottom: '8px'
+  },
+  message: {
+    fontSize: '16px',
+    color: '#7f8c8d',
+    marginBottom: '24px'
+  },
+  retryButton: {
+    padding: '12px 24px',
+    backgroundColor: '#3498db',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '8px',
+    fontSize: '16px',
+    fontWeight: 500,
+    cursor: 'pointer'
+  }
+};
+
 const styles: { [key: string]: React.CSSProperties | any } = {
   container: {
     padding: '32px'
@@ -209,6 +295,15 @@ const styles: { [key: string]: React.CSSProperties | any } = {
   loading: {
     padding: '40px',
     textAlign: 'center'
+  },
+  errorBanner: {
+    backgroundColor: '#fdf2f2',
+    border: '1px solid #fee2e2',
+    color: '#e74c3c',
+    padding: '12px 16px',
+    borderRadius: '8px',
+    marginBottom: '16px',
+    fontWeight: 500
   },
   header: {
     display: 'flex',

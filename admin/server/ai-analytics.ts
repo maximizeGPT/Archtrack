@@ -82,7 +82,11 @@ export async function detectRepetitivePatterns(
 }
 
 // Apps to ignore in pattern detection (system apps, not user workflows)
-const IGNORED_APPS = ['loginwindow', 'WindowServer', 'kernel', 'launchd', 'Dock', 'Finder'];
+const IGNORED_APPS = [
+  'loginwindow', 'WindowServer', 'kernel', 'launchd', 'Dock', 'Finder',
+  'lockscreen', 'screensaver', 'window server', 'system', 'securityagent',
+  'usernotificationcenter', 'authorizationhost', 'idle'
+];
 
 /**
  * Check if an app should be ignored in pattern detection

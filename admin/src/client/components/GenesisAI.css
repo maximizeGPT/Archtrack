@@ -1,0 +1,496 @@
+.genesis-fab {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 50px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  transition: all 0.3s ease;
+  z-index: 1000;
+  font-weight: 600;
+}
+
+.genesis-fab:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+}
+
+.genesis-fab-icon {
+  font-size: 20px;
+}
+
+.genesis-panel {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 400px;
+  max-height: 600px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  z-index: 1000;
+  overflow: hidden;
+}
+
+.genesis-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.genesis-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.genesis-icon {
+  font-size: 24px;
+}
+
+.genesis-title h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.genesis-subtitle {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.genesis-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.llm-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.llm-toggle input {
+  cursor: pointer;
+}
+
+.genesis-close {
+  background: none;
+  border: none;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: background 0.2s;
+}
+
+.genesis-close:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.genesis-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+  background: #f8f9fa;
+}
+
+.genesis-welcome {
+  text-align: center;
+  padding: 20px 0;
+}
+
+.genesis-welcome h4 {
+  margin: 0 0 8px 0;
+  color: #333;
+}
+
+.genesis-welcome p {
+  margin: 0 0 20px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.genesis-quick-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.genesis-quick-actions button {
+  padding: 10px 16px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.genesis-quick-actions button:hover {
+  background: #f0f0f0;
+  border-color: #667eea;
+}
+
+.genesis-message {
+  margin-bottom: 16px;
+}
+
+.genesis-message-content {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.genesis-message.assistant .genesis-message-content {
+  flex-direction: row;
+}
+
+.genesis-message.user .genesis-message-content {
+  flex-direction: row-reverse;
+}
+
+.genesis-avatar {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.genesis-bubble {
+  max-width: 80%;
+  padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.genesis-message.assistant .genesis-bubble {
+  background: white;
+  color: #333;
+  border: 1px solid #e0e0e0;
+  border-top-left-radius: 4px;
+}
+
+.genesis-message.user .genesis-bubble {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-top-right-radius: 4px;
+}
+
+.genesis-text {
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.genesis-text strong {
+  font-weight: 600;
+  color: #667eea;
+}
+
+.genesis-text em {
+  font-style: italic;
+}
+
+.genesis-text br {
+  display: block;
+  content: "";
+  margin-top: 8px;
+}
+
+.genesis-suggestions {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.genesis-suggestion {
+  padding: 8px 12px;
+  background: #f0f0f0;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  color: #667eea;
+  transition: all 0.2s;
+}
+
+.genesis-suggestion:hover {
+  background: #e0e0e0;
+}
+
+.genesis-typing {
+  display: flex;
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.genesis-typing span {
+  width: 8px;
+  height: 8px;
+  background: #667eea;
+  border-radius: 50%;
+  animation: typing 1.4s infinite;
+}
+
+.genesis-typing span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.genesis-typing span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-10px); }
+}
+
+.genesis-input {
+  display: flex;
+  padding: 16px 20px;
+  background: white;
+  border-top: 1px solid #e0e0e0;
+  gap: 12px;
+}
+
+.genesis-input input {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1px solid #e0e0e0;
+  border-radius: 24px;
+  font-size: 14px;
+  outline: none;
+}
+
+.genesis-input input:focus {
+  border-color: #667eea;
+}
+
+.genesis-input button {
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 24px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: opacity 0.2s;
+}
+
+.genesis-input button:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.genesis-input button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+@media (max-width: 767px) {
+  .genesis-fab {
+    bottom: 20px;
+    right: 16px;
+    padding: 14px;
+    border-radius: 50%;
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  
+  .genesis-fab-text {
+    display: none;
+  }
+  
+  .genesis-panel {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+    z-index: 2000;
+  }
+  
+  .genesis-header {
+    padding: 12px 16px;
+    min-height: 56px;
+  }
+  
+  .genesis-title h3 {
+    font-size: 16px;
+  }
+  
+  .genesis-subtitle {
+    font-size: 11px;
+  }
+  
+  .genesis-icon {
+    font-size: 20px;
+  }
+  
+  .genesis-messages {
+    padding: 16px;
+    padding-bottom: 80px; /* Space for input */
+  }
+  
+  .genesis-message {
+    margin-bottom: 12px;
+  }
+  
+  .genesis-message-content {
+    gap: 8px;
+  }
+  
+  .genesis-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 14px;
+  }
+  
+  .genesis-bubble {
+    max-width: 85%;
+    padding: 10px 14px;
+    font-size: 14px;
+  }
+  
+  .genesis-text {
+    line-height: 1.5;
+  }
+  
+  .genesis-text strong {
+    font-weight: 600;
+  }
+  
+  .genesis-suggestions {
+    margin-top: 10px;
+    gap: 6px;
+  }
+  
+  .genesis-suggestion {
+    padding: 8px 12px;
+    font-size: 13px;
+    border-radius: 8px;
+  }
+  
+  .genesis-input {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 12px 16px;
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    background: white;
+    border-top: 1px solid #e0e0e0;
+    gap: 10px;
+    z-index: 2001;
+  }
+  
+  .genesis-input input {
+    padding: 12px 16px;
+    font-size: 16px; /* Prevents zoom on iOS */
+    border-radius: 24px;
+  }
+  
+  .genesis-input button {
+    padding: 12px 20px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  
+  .genesis-welcome {
+    padding: 16px 0;
+  }
+  
+  .genesis-welcome h4 {
+    font-size: 18px;
+    margin-bottom: 8px;
+  }
+  
+  .genesis-welcome p {
+    font-size: 14px;
+    margin-bottom: 20px;
+  }
+  
+  .genesis-quick-actions {
+    gap: 10px;
+  }
+  
+  .genesis-quick-actions button {
+    padding: 14px 16px;
+    font-size: 14px;
+  }
+  
+  .genesis-close {
+    width: 36px;
+    height: 36px;
+    font-size: 22px;
+  }
+  
+  .llm-toggle {
+    font-size: 12px;
+    gap: 4px;
+  }
+  
+  .llm-toggle input {
+    width: 16px;
+    height: 16px;
+  }
+}
+
+/* Small phones */
+@media (max-width: 375px) {
+  .genesis-bubble {
+    max-width: 88%;
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+  
+  .genesis-suggestion {
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+  
+  .genesis-input input {
+    font-size: 16px;
+  }
+  
+  .genesis-input button {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
+}

@@ -1,12 +1,13 @@
 import { app, Tray, Menu, nativeImage, ipcMain } from 'electron';
 import Store from 'electron-store';
 import { startTracking, getTrackingStatus, setupIpcHandlers } from './tracker.js';
+import { ARCHTRACK_CONFIG, getServerUrl } from './config.js';
 
 const store = new Store({
   defaults: { 
-    employeeId: 'emp-001', 
-    employeeName: 'Mohammed', 
-    serverUrl: 'http://localhost:3001' 
+    employeeId: ARCHTRACK_CONFIG.defaults.employeeId, 
+    employeeName: ARCHTRACK_CONFIG.defaults.employeeName, 
+    serverUrl: getServerUrl()
   }
 });
 

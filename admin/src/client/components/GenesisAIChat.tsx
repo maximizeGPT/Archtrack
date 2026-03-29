@@ -74,7 +74,6 @@ function FormattedMessage({ content }: { content: string }) {
 export function GenesisAIChat() {
   const [isOpen, setIsOpen] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
-  const [isHovered, setIsHovered] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
@@ -201,15 +200,13 @@ export function GenesisAIChat() {
       {!isOpen && (
         <button
           onClick={() => setIsOpen(true)}
-          onMouseEnter={() => setIsHovered(true)}
-          onMouseLeave={() => setIsHovered(false)}
           style={{
             ...styles.floatingButton,
-            transform: isHovered ? 'scale(1.1)' : 'scale(1)',
-            boxShadow: isHovered 
-              ? '0 6px 20px rgba(59, 130, 246, 0.6)' 
-              : '0 4px 12px rgba(59, 130, 246, 0.4)'
-          }}
+            ':hover': {
+              transform: 'scale(1.1)',
+              boxShadow: '0 6px 20px rgba(59, 130, 246, 0.6)'
+            }
+          } as React.CSSProperties}
           aria-label="Open Genesis AI Chat"
           title="Open AI Assistant"
         >
@@ -374,8 +371,10 @@ const styles: { [key: string]: React.CSSProperties } = {
     position: 'fixed',
     bottom: 24,
     right: 24,
-    width: 400,
-    height: 550,
+    width: 'calc(100vw - 48px)',
+    maxWidth: 400,
+    height: 'calc(100vh - 48px)',
+    maxHeight: 550,
     backgroundColor: 'white',
     borderRadius: 16,
     boxShadow: '0 20px 50px rgba(0,0,0,0.3)',

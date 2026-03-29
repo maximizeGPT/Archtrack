@@ -1,5 +1,5 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import { createTimeEntry, updateTimeEntry, getEmployeeById } from './database';
+import { createTimeEntry, updateTimeEntry, getEmployeeById, createActivity, getActivityById, updateActivity } from './database.js';
 
 interface ConnectedClient {
   ws: WebSocket;
@@ -125,36 +125,57 @@ async function handleMessage(ws: WebSocket, message: any): Promise<void> {
       break;
 
     case 'time-entries':
-      // Batch sync from desktop app
-      console.log(`📤 ${client.employeeName} synced ${message.entries?.length || 0} entries`);
-      
+      // Batch sync from desktop app (activities, not time entries)
+      console.log(`📤 ${client.employeeName} synced ${message.entries?.length || 0} activities`);
+
       if (message.entries && Array.isArray(message.entries)) {
+        let successCount = 0;
+        let errorCount = 0;
+        let lastError: string | null = null;
+
         for (const entry of message.entries) {
           try {
-            // Check if entry already exists
-            const { getTimeEntryById } = require('./database');
-            const existing = await getTimeEntryById(entry.id);
-            
+            // Check if activity already exists
+            const existing = await getActivityById(entry.id);
+
             if (existing) {
-              await updateTimeEntry(entry.id, entry);
+              await updateActivity(entry.id, entry);
             } else {
-              await createTimeEntry(entry);
+              await createActivity(entry);
             }
-          } catch (err) {
-            console.error('Error syncing entry:', err);
+            successCount++;
+          } catch (err: any) {
+            console.error('Error syncing activity:', err);
+            errorCount++;
+            lastError = err.message || 'Unknown error';
           }
         }
-        
-        // Notify admins
-        broadcastToAdmins({
-          type: 'sync:completed',
+
+        // Send response back to client
+        ws.send(JSON.stringify({
+          type: 'sync:response',
           data: {
-            employeeId: message.employeeId,
-            employeeName: client.employeeName,
-            count: message.entries.length,
-            timestamp: new Date().toISOString()
+            success: errorCount === 0,
+            successCount,
+            errorCount,
+            message: errorCount > 0
+              ? `Synced ${successCount} activities, ${errorCount} failed. Last error: ${lastError}`
+              : `Successfully synced ${successCount} activities`
           }
-        });
+        }));
+
+        // Notify admins
+        if (successCount > 0) {
+          broadcastToAdmins({
+            type: 'sync:completed',
+            data: {
+              employeeId: message.employeeId,
+              employeeName: client.employeeName,
+              count: successCount,
+              timestamp: new Date().toISOString()
+            }
+          });
+        }
       }
       break;
 

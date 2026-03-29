@@ -5,6 +5,7 @@ import { Employees } from './pages/Employees';
 import { Projects } from './pages/Projects';
 import { Tasks } from './pages/Tasks';
 import { Reports } from './pages/Reports';
+import { GenesisAI } from './components/GenesisAI';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import './App.css';
 
@@ -175,6 +176,7 @@ const App: React.FC = () => (
   <WebSocketProvider>
     <BrowserRouter>
       <AppContent />
+      <GenesisAI />
     </BrowserRouter>
   </WebSocketProvider>
 );

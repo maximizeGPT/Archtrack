@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import type { Employee, Activity } from '@archtrack/shared';
+import type { Employee, Activity } from '../../../shared-types';
+
+const SUSPICIOUS_ACTIVITIES_PER_PAGE = 10;
 
 export const Reports: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -8,6 +10,8 @@ export const Reports: React.FC = () => {
   const [endDate, setEndDate] = useState<string>('');
   const [report, setReport] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [_activities] = useState<Activity[]>([]);
+  const [suspiciousPage, setSuspiciousPage] = useState(1);
 
   useEffect(() => {
     loadEmployees();
@@ -35,6 +39,7 @@ export const Reports: React.FC = () => {
     if (!selectedEmployee || !startDate || !endDate) return;
     
     setLoading(true);
+    setSuspiciousPage(1); // Reset pagination on new report
     try {
       const res = await fetch(
         `/api/reports/productivity?employeeId=${selectedEmployee}&startDate=${startDate}&endDate=${endDate}`
@@ -49,6 +54,15 @@ export const Reports: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Pagination for suspicious activities
+  const paginatedSuspiciousActivities = report?.suspiciousActivities?.slice(
+    (suspiciousPage - 1) * SUSPICIOUS_ACTIVITIES_PER_PAGE,
+    suspiciousPage * SUSPICIOUS_ACTIVITIES_PER_PAGE
+  ) || [];
+  const totalSuspiciousPages = Math.ceil(
+    (report?.suspiciousActivities?.length || 0) / SUSPICIOUS_ACTIVITIES_PER_PAGE
+  );
 
   return (
     <div style={styles.container}>
@@ -127,7 +141,7 @@ export const Reports: React.FC = () => {
                 ⚠️ Suspicious Activities ({report.suspiciousActivities.length})
               </h3>
               <div style={styles.activityList}>
-                {report.suspiciousActivities.map((activity: Activity) => (
+                {paginatedSuspiciousActivities.map((activity: Activity) => (
                   <div key={activity.id} style={styles.suspiciousActivity}>
                     <p style={styles.activityApp}>{activity.appName}</p>
                     <p style={styles.activityTitle}>{activity.windowTitle}</p>
@@ -138,6 +152,27 @@ export const Reports: React.FC = () => {
                   </div>
                 ))}
               </div>
+              {totalSuspiciousPages > 1 && (
+                <div style={styles.pagination}>
+                  <button
+                    onClick={() => setSuspiciousPage(p => Math.max(1, p - 1))}
+                    disabled={suspiciousPage === 1}
+                    style={styles.paginationButton}
+                  >
+                    ← Prev
+                  </button>
+                  <span style={styles.paginationInfo}>
+                    Page {suspiciousPage} of {totalSuspiciousPages}
+                  </span>
+                  <button
+                    onClick={() => setSuspiciousPage(p => Math.min(totalSuspiciousPages, p + 1))}
+                    disabled={suspiciousPage === totalSuspiciousPages}
+                    style={styles.paginationButton}
+                  >
+                    Next →
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -162,8 +197,11 @@ export const Reports: React.FC = () => {
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
-    padding: '32px'
-  },
+    padding: '32px',
+    '@media (max-width: 768px)': {
+      padding: '16px'
+    }
+  } as React.CSSProperties,
   header: {
     marginBottom: '24px'
   },
@@ -182,21 +220,33 @@ const styles: { [key: string]: React.CSSProperties } = {
     display: 'flex',
     gap: '12px',
     marginBottom: '24px',
-    flexWrap: 'wrap'
-  },
+    flexWrap: 'wrap',
+    '@media (max-width: 768px)': {
+      flexDirection: 'column',
+      gap: '8px'
+    }
+  } as React.CSSProperties,
   select: {
     padding: '10px 16px',
     border: '1px solid #ddd',
     borderRadius: '6px',
     fontSize: '14px',
-    minWidth: '200px'
-  },
+    minWidth: '200px',
+    '@media (max-width: 768px)': {
+      minWidth: '100%',
+      fontSize: '16px' // Prevent zoom on iOS
+    }
+  } as React.CSSProperties,
   input: {
     padding: '10px 16px',
     border: '1px solid #ddd',
     borderRadius: '6px',
-    fontSize: '14px'
-  },
+    fontSize: '14px',
+    '@media (max-width: 768px)': {
+      fontSize: '16px', // Prevent zoom on iOS
+      width: '100%'
+    }
+  } as React.CSSProperties,
   button: {
     padding: '10px 24px',
     backgroundColor: '#3498db',
@@ -215,14 +265,21 @@ const styles: { [key: string]: React.CSSProperties } = {
   summaryCards: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-    gap: '16px'
-  },
+    gap: '16px',
+    '@media (max-width: 768px)': {
+      gridTemplateColumns: '1fr 1fr',
+      gap: '8px'
+    }
+  } as React.CSSProperties,
   card: {
     backgroundColor: '#fff',
     padding: '20px',
     borderRadius: '12px',
-    boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-  },
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+    '@media (max-width: 768px)': {
+      padding: '12px'
+    }
+  } as React.CSSProperties,
   cardTitle: {
     fontSize: '14px',
     color: '#7f8c8d',
@@ -232,8 +289,11 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '32px',
     fontWeight: 600,
     color: '#2c3e50',
-    margin: 0
-  },
+    margin: 0,
+    '@media (max-width: 768px)': {
+      fontSize: '24px'
+    }
+  } as React.CSSProperties,
   section: {
     backgroundColor: '#fff',
     padding: '20px',
@@ -297,5 +357,29 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontSize: '14px',
     fontWeight: 600,
     color: '#3498db'
+  },
+  pagination: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: '12px',
+    marginTop: '16px',
+    paddingTop: '16px',
+    borderTop: '1px solid #eee'
+  },
+  paginationButton: {
+    padding: '8px 16px',
+    backgroundColor: '#3498db',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '14px',
+    fontWeight: 500
+  },
+  paginationInfo: {
+    fontSize: '14px',
+    color: '#666',
+    fontWeight: 500
   }
 };

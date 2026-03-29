@@ -1,23 +1,26 @@
 import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
 import path from 'path';
 
 export default defineConfig({
-  plugins: [react()],
-  root: path.join(__dirname, 'src/renderer'),
-  base: './',
   build: {
-    outDir: path.join(__dirname, 'dist/renderer'),
+    outDir: path.join(__dirname, 'dist'),
     emptyOutDir: true,
+    lib: {
+      entry: path.join(__dirname, 'src/main.ts'),
+      formats: ['cjs'],
+      fileName: 'main'
+    },
     rollupOptions: {
-      input: {
-        main: path.join(__dirname, 'src/renderer/index.html'),
+      external: [
+        'electron', 
+        'electron-store', 
+        'active-win'
+      ],
+      output: {
+        inlineDynamicImports: true,
       },
     },
-  },
-  server: {
-    port: 5173,
-    strictPort: true,
+    ssr: true,  // This tells Vite this is a Node.js build
   },
   resolve: {
     alias: {
