@@ -103,6 +103,13 @@ A: Yes. Full transparency. They can see their productivity, time breakdown, and 
 **Q: What about privacy?**
 A: All data stays local by default. No third-party servers. You own everything.
 
+**Q: I have multiple offices. Will this work?**
+A: Yes. You have two options:
+1. **One central server** (recommended) — Set up one DigitalOcean droplet ($5/month). All employees at all locations connect to it over the internet. Simple, cheap, data centralized.
+2. **Separate server per location** — Each office gets its own server. More complex, but data stays local to each office.
+
+For most small businesses, one central server works perfectly.
+
 ---
 
 ## System Requirements
