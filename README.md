@@ -45,32 +45,34 @@ Your employees install a small desktop app. It runs silently and tracks:
 
 ---
 
-## Quick Start (5 Minutes)
+## Quick Start
 
-### Step 1: Install the Dashboard
+### Step 1: Deploy to the Cloud (Recommended)
+
+**Option A: DigitalOcean (Easiest)**
+1. Create a DigitalOcean account
+2. Create a Droplet (Ubuntu, $5/month plan)
+3. SSH into your droplet and run:
 ```bash
-git clone https://github.com/maximizeGPT/Archtrack.git
-cd Archtrack
-npm install
-npm start
+curl -sSL https://raw.githubusercontent.com/maximizeGPT/Archtrack/main/deploy-enterprise.sh | bash
 ```
+4. Your dashboard is now live at `http://YOUR_DROPLET_IP:3001`
 
-Open http://localhost:3001 in your browser.
+**Option B: Your Own Server**
+If you have a server or VPS, just run the deploy script above.
 
 ### Step 2: Add Your Employees
-1. Click "Employees" in the sidebar
-2. Add each team member (name, department, hourly rate)
-3. Each employee gets a unique ID
+1. Open your dashboard URL in a browser
+2. Click "Employees" in the sidebar
+3. Add each team member (name, department, hourly rate)
+4. Each employee gets a unique ID
 
 ### Step 3: Install Desktop Trackers
 On each employee's computer:
-```bash
-cd desktop
-npm install
-npm run build
-```
-
-Give employees their unique ID. The tracker runs automatically.
+1. Download the desktop tracker (from your dashboard)
+2. Install it
+3. Enter their unique ID
+4. The tracker runs automatically and syncs to your server
 
 ---
 
