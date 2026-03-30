@@ -68,11 +68,33 @@ If you have a server or VPS, just run the deploy script above.
 4. Each employee gets a unique ID
 
 ### Step 3: Install Desktop Trackers
-On each employee's computer:
-1. Download the desktop tracker (from your dashboard)
-2. Install it
-3. Enter their unique ID
-4. The tracker runs automatically and syncs to your server
+
+**Currently, the desktop tracker requires manual setup.** Here's how:
+
+On each employee's Mac or Windows computer:
+
+1. **Download the code:**
+```bash
+git clone https://github.com/maximizeGPT/Archtrack.git
+cd Archtrack/desktop
+```
+
+2. **Install and build:**
+```bash
+npm install
+npm run build
+```
+
+3. **Run the tracker:**
+```bash
+npm start
+```
+
+4. **Enter their unique ID** (from Step 2) when prompted
+
+The tracker will start automatically on login and run silently in the background.
+
+**Need help?** The desktop tracker setup requires some technical knowledge. Consider hiring a developer for 1-2 hours to set this up for all employees.
 
 ---
 
