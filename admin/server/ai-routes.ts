@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { getDatabase } from '../database.js';
-import { detectRepetitivePatterns, getTopAgentOpportunities } from '../ai-analytics.js';
+import { getDatabase } from './database.js';
+import { detectRepetitivePatterns, getTopAgentOpportunities } from './ai-analytics.js';
 
 const router = Router();
 

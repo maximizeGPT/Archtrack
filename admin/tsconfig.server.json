@@ -15,9 +15,9 @@
     "declaration": true,
     "baseUrl": ".",
     "paths": {
-      "@archtrack/shared": ["../shared/src"]
+      "@archtrack/shared": ["./shared-types"]
     }
   },
-  "include": ["server/**/*", "../shared/src/**/*"],
+  "include": ["server/**/*", "shared-types.ts"],
   "exclude": ["node_modules", "dist", "src/client"]
 }
