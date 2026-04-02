@@ -26,28 +26,21 @@ if ! command -v pm2 &> /dev/null; then
 fi
 echo "✅ PM2 installed"
 
-# Step 3: Clone or update repo
+# Step 3: Clone fresh (always clean deploy)
 APP_DIR="/opt/archtrack"
-if [ -d "$APP_DIR/.git" ]; then
-    echo "🔄 Updating existing installation..."
-    cd "$APP_DIR"
-    git fetch origin
-    git reset --hard origin/main
-else
-    echo "📥 Fresh install — cloning from GitHub..."
-    rm -rf "$APP_DIR"
-    git clone https://github.com/maximizeGPT/Archtrack.git "$APP_DIR"
-    cd "$APP_DIR"
-fi
+echo "📥 Cloning fresh from GitHub..."
+rm -rf "$APP_DIR"
+git clone https://github.com/maximizeGPT/Archtrack.git "$APP_DIR"
+cd "$APP_DIR"
 
-# Step 4: Install dependencies
+# Step 4: Install dependencies (including dev deps for build)
 echo "📦 Installing admin dependencies..."
 cd "$APP_DIR/admin"
-npm install --production 2>&1 | tail -3
+npm install 2>&1 | tail -3
 
 # Step 5: Build
 echo "🔨 Building server..."
-npx tsc -p tsconfig.server.json 2>&1 || true
+npx tsc -p tsconfig.server.json 2>&1
 echo "🔨 Building client..."
 npx vite build 2>&1 | tail -3
 
