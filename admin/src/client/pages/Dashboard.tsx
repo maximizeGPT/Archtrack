@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { api } from '../lib/api';
 import { useWebSocket } from '../contexts/WebSocketContext';
 
 import type { Employee } from '../../../shared-types';
@@ -69,17 +70,10 @@ export const Dashboard: React.FC = () => {
   const loadData = async () => {
     try {
       setError(null);
-      const [statsRes, employeesRes] = await Promise.all([
-        fetch('/api/dashboard/stats'),
-        fetch('/api/employees')
+      const [statsData, employeesData] = await Promise.all([
+        api.get('/api/dashboard/stats'),
+        api.get('/api/employees')
       ]);
-
-      if (!statsRes.ok || !employeesRes.ok) {
-        throw new Error('Failed to fetch dashboard data');
-      }
-
-      const statsData = await statsRes.json();
-      const employeesData = await employeesRes.json();
 
       if (statsData.success) setStats(statsData.data);
       if (employeesData.success) setEmployees(employeesData.data);

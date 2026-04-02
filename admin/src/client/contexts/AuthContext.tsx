@@ -54,9 +54,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      const data = await api.get('/api/auth/me');
-      setUser(data.user);
-      setOrg(data.org || null);
+      const res = await api.get('/api/auth/me');
+      setUser(res.data.user);
+      setOrg(res.data.org || null);
     } catch (err: any) {
       // api wrapper already attempted refresh on 401
       // If we still fail, log out
@@ -71,23 +71,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [checkAuth]);
 
   const login = async (email: string, password: string) => {
-    const data = await api.post('/api/auth/login', { email, password });
-    localStorage.setItem(TOKEN_KEY, data.token);
-    if (data.refreshToken) {
-      localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
+    const res = await api.post('/api/auth/login', { email, password });
+    const d = res.data;
+    localStorage.setItem(TOKEN_KEY, d.accessToken);
+    if (d.refreshToken) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, d.refreshToken);
     }
-    setUser(data.user);
-    setOrg(data.org || null);
+    setUser(d.user);
+    setOrg(d.org || null);
   };
 
   const signup = async (email: string, password: string, name: string, orgName: string) => {
-    const data = await api.post('/api/auth/signup', { email, password, name, orgName });
-    localStorage.setItem(TOKEN_KEY, data.token);
-    if (data.refreshToken) {
-      localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
+    const res = await api.post('/api/auth/signup', { email, password, name, orgName });
+    const d = res.data;
+    localStorage.setItem(TOKEN_KEY, d.accessToken);
+    if (d.refreshToken) {
+      localStorage.setItem(REFRESH_TOKEN_KEY, d.refreshToken);
     }
-    setUser(data.user);
-    setOrg(data.org || null);
+    setUser(d.user);
+    setOrg(d.org || null);
   };
 
   return (

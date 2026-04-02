@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { api } from '../lib/api';
 import type { Project } from '../../../shared-types';
 
 export const Projects: React.FC = () => {
@@ -22,11 +23,7 @@ export const Projects: React.FC = () => {
   const loadProjects = async () => {
     try {
       setError(null);
-      const res = await fetch('/api/projects');
-      if (!res.ok) {
-        throw new Error(`Failed to load projects: ${res.status}`);
-      }
-      const data = await res.json();
+      const data = await api.get('/api/projects');
       if (data.success) {
         setProjects(data.data);
       } else {
@@ -57,21 +54,15 @@ export const Projects: React.FC = () => {
     const method = editingProject ? 'PUT' : 'POST';
 
     try {
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          budget: parseFloat(formData.budget) || 0
-        })
-      });
+      const payload = {
+        ...formData,
+        budget: parseFloat(formData.budget) || 0
+      };
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to save project: ${res.status}`);
-      }
+      const data = editingProject
+        ? await api.put(url, payload)
+        : await api.post(url, payload);
 
-      const data = await res.json();
       if (data.success) {
         setShowForm(false);
         setEditingProject(null);

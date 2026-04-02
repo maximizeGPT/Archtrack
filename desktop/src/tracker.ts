@@ -44,6 +44,7 @@ interface Config {
   employeeId: string;
   employeeName: string;
   serverUrl: string;
+  deviceToken?: string;
 }
 
 // Activity tracking state
@@ -66,7 +67,8 @@ let consecutiveIdleChecks = 0;
 let config: Config = {
   employeeId: ARCHTRACK_CONFIG.defaults.employeeId,
   employeeName: ARCHTRACK_CONFIG.defaults.employeeName,
-  serverUrl: getServerUrl()
+  serverUrl: getServerUrl(),
+  deviceToken: ARCHTRACK_CONFIG.deviceToken || ''
 };
 
 export async function startTracking(): Promise<void> {
@@ -74,6 +76,7 @@ export async function startTracking(): Promise<void> {
 
   // Load config
   loadConfig();
+  console.log(`Auth: token=${config.deviceToken ? 'present (' + config.deviceToken.length + ' chars)' : 'MISSING'}, server=${config.serverUrl}`);
 
   // Load active-win dynamically
   try {
@@ -356,11 +359,21 @@ async function syncToServer(): Promise<void> {
         }))
       };
 
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (config.deviceToken) {
+        headers['Authorization'] = `Bearer ${config.deviceToken}`;
+      }
+      console.log(`Sync: token=${config.deviceToken ? 'yes' : 'no'}, url=${config.serverUrl}, authHeader=${headers['Authorization'] ? 'set' : 'MISSING'}`);
+
       const response = await fetch(`${config.serverUrl}/api/activity`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload)
       });
+      if (!response.ok) {
+        const body = await response.text();
+        console.log(`Sync response: ${response.status} ${response.statusText} - ${body}`);
+      }
 
       if (response.ok) {
         const result: any = await response.json();

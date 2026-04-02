@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { api } from '../lib/api';
 import type { Employee, Activity } from '../../../shared-types';
 
 const SUSPICIOUS_ACTIVITIES_PER_PAGE = 10;
@@ -25,8 +26,7 @@ export const Reports: React.FC = () => {
 
   const loadEmployees = async () => {
     try {
-      const res = await fetch('/api/employees');
-      const data = await res.json();
+      const data = await api.get('/api/employees');
       if (data.success) {
         setEmployees(data.data);
       }
@@ -41,10 +41,9 @@ export const Reports: React.FC = () => {
     setLoading(true);
     setSuspiciousPage(1); // Reset pagination on new report
     try {
-      const res = await fetch(
+      const data = await api.get(
         `/api/reports/productivity?employeeId=${selectedEmployee}&startDate=${startDate}&endDate=${endDate}`
       );
-      const data = await res.json();
       if (data.success) {
         setReport(data.data);
       }

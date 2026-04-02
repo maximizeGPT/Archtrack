@@ -18,10 +18,10 @@ async function refreshToken(): Promise<boolean> {
     if (!res.ok) return false;
 
     const data = await res.json();
-    if (data.token) {
-      localStorage.setItem(TOKEN_KEY, data.token);
-      if (data.refreshToken) {
-        localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
+    if (data.data?.accessToken) {
+      localStorage.setItem(TOKEN_KEY, data.data.accessToken);
+      if (data.data.refreshToken) {
+        localStorage.setItem(REFRESH_TOKEN_KEY, data.data.refreshToken);
       }
       return true;
     }

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { api } from '../lib/api';
 import type { Task, Project, Employee } from '../../../shared-types';
 
 export const Tasks: React.FC = () => {
@@ -27,20 +28,10 @@ export const Tasks: React.FC = () => {
   const loadData = async () => {
     try {
       setError(null);
-      const [tasksRes, projectsRes, employeesRes] = await Promise.all([
-        fetch('/api/tasks'),
-        fetch('/api/projects'),
-        fetch('/api/employees')
-      ]);
-
-      if (!tasksRes.ok || !projectsRes.ok || !employeesRes.ok) {
-        throw new Error('Failed to load data');
-      }
-
       const [tasksData, projectsData, employeesData] = await Promise.all([
-        tasksRes.json(),
-        projectsRes.json(),
-        employeesRes.json()
+        api.get('/api/tasks'),
+        api.get('/api/projects'),
+        api.get('/api/employees')
       ]);
 
       if (tasksData.success) setTasks(tasksData.data);
@@ -75,21 +66,15 @@ export const Tasks: React.FC = () => {
     const method = editingTask ? 'PUT' : 'POST';
 
     try {
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          estimatedHours: parseFloat(formData.estimatedHours) || 0
-        })
-      });
+      const payload = {
+        ...formData,
+        estimatedHours: parseFloat(formData.estimatedHours) || 0
+      };
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to save task: ${res.status}`);
-      }
+      const data = editingTask
+        ? await api.put(url, payload)
+        : await api.post(url, payload);
 
-      const data = await res.json();
       if (data.success) {
         setShowForm(false);
         setEditingTask(null);
@@ -120,17 +105,7 @@ export const Tasks: React.FC = () => {
 
   const handleStatusChange = async (task: Task, newStatus: string) => {
     try {
-      const res = await fetch(`/api/tasks/${task.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
-      });
-
-      if (!res.ok) {
-        throw new Error('Failed to update status');
-      }
-
-      const data = await res.json();
+      const data = await api.put(`/api/tasks/${task.id}`, { status: newStatus });
       if (data.success) {
         setTasks(tasks.map(t => t.id === task.id ? { ...t, status: newStatus } : t));
       }
