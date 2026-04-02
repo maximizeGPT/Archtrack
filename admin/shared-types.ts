@@ -1,7 +1,39 @@
 // Shared types for ArchTrack
 
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  ownerEmail: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface User {
+  id: string;
+  orgId: string;
+  email: string;
+  passwordHash?: string;
+  name: string;
+  role: 'owner' | 'admin' | 'viewer';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SetupToken {
+  id: string;
+  orgId: string;
+  employeeId: string;
+  token: string;
+  isUsed: boolean;
+  usedAt?: string;
+  expiresAt: string;
+  createdAt: string;
+}
+
 export interface Employee {
   id: string;
+  orgId?: string;
   name: string;
   email: string;
   role: 'employee' | 'manager' | 'admin';
@@ -14,6 +46,7 @@ export interface Employee {
 
 export interface Project {
   id: string;
+  orgId?: string;
   name: string;
   description?: string;
   clientName?: string;
@@ -27,6 +60,7 @@ export interface Project {
 
 export interface Task {
   id: string;
+  orgId?: string;
   projectId: string;
   name: string;
   description?: string;
@@ -40,6 +74,7 @@ export interface Task {
 
 export interface TimeEntry {
   id: string;
+  orgId?: string;
   employeeId: string;
   taskId?: string;
   projectId?: string;
@@ -56,6 +91,7 @@ export interface TimeEntry {
 
 export interface Activity {
   id: string;
+  orgId?: string;
   employeeId: string;
   timestamp: string;
   appName: string;

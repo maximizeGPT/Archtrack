@@ -37,6 +37,7 @@ import {
   getRoleStatus,
   ROLE_PROFILES
 } from './role-detector.js';
+import { requireAuth, requireDeviceAuth, requireAnyAuth } from './auth.js';
 
 export function setupRoutes(app: Express): void {
   // Health check
@@ -45,9 +46,9 @@ export function setupRoutes(app: Express): void {
   });
 
   // Dashboard
-  app.get('/api/dashboard/stats', async (req, res) => {
+  app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
     try {
-      const stats = await getDashboardStats();
+      const stats = await getDashboardStats(req.orgId!);
       res.json({ success: true, data: stats });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
@@ -55,18 +56,18 @@ export function setupRoutes(app: Express): void {
   });
 
   // Employees
-  app.get('/api/employees', async (req, res) => {
+  app.get('/api/employees', requireAuth, async (req, res) => {
     try {
-      const employees = await getAllEmployees();
+      const employees = await getAllEmployees(req.orgId!);
       res.json({ success: true, data: employees });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
     }
   });
 
-  app.get('/api/employees/:id', async (req, res) => {
+  app.get('/api/employees/:id', requireAuth, async (req, res) => {
     try {
-      const employee = await getEmployeeById(req.params.id);
+      const employee = await getEmployeeById(req.orgId!, req.params.id);
       if (!employee) {
         return res.status(404).json({ success: false, error: 'Employee not found' });
       }
@@ -76,12 +77,13 @@ export function setupRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/employees', async (req, res) => {
+  app.post('/api/employees', requireAuth, async (req, res) => {
     try {
       const now = new Date().toISOString();
       const employee = {
         id: uuidv4(),
         ...req.body,
+        orgId: req.orgId!,
         role: req.body.role || 'employee',
         createdAt: now,
         updatedAt: now
@@ -93,19 +95,19 @@ export function setupRoutes(app: Express): void {
     }
   });
 
-  app.put('/api/employees/:id', async (req, res) => {
+  app.put('/api/employees/:id', requireAuth, async (req, res) => {
     try {
-      await updateEmployee(req.params.id, req.body);
-      const employee = await getEmployeeById(req.params.id);
+      await updateEmployee(req.orgId!, req.params.id, req.body);
+      const employee = await getEmployeeById(req.orgId!, req.params.id);
       res.json({ success: true, data: employee });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
     }
   });
 
-  app.delete('/api/employees/:id', async (req, res) => {
+  app.delete('/api/employees/:id', requireAuth, async (req, res) => {
     try {
-      await deleteEmployee(req.params.id);
+      await deleteEmployee(req.orgId!, req.params.id);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
@@ -113,18 +115,18 @@ export function setupRoutes(app: Express): void {
   });
 
   // Projects
-  app.get('/api/projects', async (req, res) => {
+  app.get('/api/projects', requireAuth, async (req, res) => {
     try {
-      const projects = await getAllProjects();
+      const projects = await getAllProjects(req.orgId!);
       res.json({ success: true, data: projects });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
     }
   });
 
-  app.get('/api/projects/:id', async (req, res) => {
+  app.get('/api/projects/:id', requireAuth, async (req, res) => {
     try {
-      const project = await getProjectById(req.params.id);
+      const project = await getProjectById(req.orgId!, req.params.id);
       if (!project) {
         return res.status(404).json({ success: false, error: 'Project not found' });
       }
@@ -134,12 +136,13 @@ export function setupRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/projects', async (req, res) => {
+  app.post('/api/projects', requireAuth, async (req, res) => {
     try {
       const now = new Date().toISOString();
       const project = {
         id: uuidv4(),
         ...req.body,
+        orgId: req.orgId!,
         status: req.body.status || 'active',
         startDate: req.body.startDate || now,
         createdAt: now,
@@ -152,10 +155,10 @@ export function setupRoutes(app: Express): void {
     }
   });
 
-  app.put('/api/projects/:id', async (req, res) => {
+  app.put('/api/projects/:id', requireAuth, async (req, res) => {
     try {
-      await updateProject(req.params.id, req.body);
-      const project = await getProjectById(req.params.id);
+      await updateProject(req.orgId!, req.params.id, req.body);
+      const project = await getProjectById(req.orgId!, req.params.id);
       res.json({ success: true, data: project });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
@@ -163,13 +166,13 @@ export function setupRoutes(app: Express): void {
   });
 
   // Tasks
-  app.get('/api/tasks', async (req, res) => {
+  app.get('/api/tasks', requireAuth, async (req, res) => {
     try {
       let tasks;
       if (req.query.projectId) {
-        tasks = await getTasksByProject(req.query.projectId as string);
+        tasks = await getTasksByProject(req.orgId!, req.query.projectId as string);
       } else {
-        tasks = await getAllTasks();
+        tasks = await getAllTasks(req.orgId!);
       }
       res.json({ success: true, data: tasks });
     } catch (error) {
@@ -177,12 +180,13 @@ export function setupRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/tasks', async (req, res) => {
+  app.post('/api/tasks', requireAuth, async (req, res) => {
     try {
       const now = new Date().toISOString();
       const task = {
         id: uuidv4(),
         ...req.body,
+        orgId: req.orgId!,
         status: req.body.status || 'todo',
         priority: req.body.priority || 'medium',
         createdAt: now,
@@ -195,9 +199,9 @@ export function setupRoutes(app: Express): void {
     }
   });
 
-  app.put('/api/tasks/:id', async (req, res) => {
+  app.put('/api/tasks/:id', requireAuth, async (req, res) => {
     try {
-      await updateTask(req.params.id, req.body);
+      await updateTask(req.orgId!, req.params.id, req.body);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
@@ -205,17 +209,19 @@ export function setupRoutes(app: Express): void {
   });
 
   // Legacy Time Entries
-  app.get('/api/time-entries', async (req, res) => {
+  app.get('/api/time-entries', requireAuth, async (req, res) => {
     try {
       let entries;
       if (req.query.employeeId) {
         entries = await getTimeEntriesByEmployee(
+          req.orgId!,
           req.query.employeeId as string,
           req.query.startDate as string,
           req.query.endDate as string
         );
       } else {
         entries = await getAllTimeEntries(
+          req.orgId!,
           req.query.startDate as string,
           req.query.endDate as string
         );
@@ -226,16 +232,16 @@ export function setupRoutes(app: Express): void {
     }
   });
 
-  app.get('/api/time-entries/active', async (req, res) => {
+  app.get('/api/time-entries/active', requireAuth, async (req, res) => {
     try {
-      const entries = await getActiveTimeEntries();
+      const entries = await getActiveTimeEntries(req.orgId!);
       res.json({ success: true, data: entries });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
     }
   });
 
-  app.post('/api/time-entries', async (req, res) => {
+  app.post('/api/time-entries', requireAuth, async (req, res) => {
     try {
       const now = new Date().toISOString();
       const entry = {
@@ -244,16 +250,16 @@ export function setupRoutes(app: Express): void {
         createdAt: now,
         updatedAt: now
       };
-      await createTimeEntry(entry);
+      await createTimeEntry(req.orgId!, entry);
       res.json({ success: true, data: entry });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
     }
   });
 
-  app.put('/api/time-entries/:id', async (req, res) => {
+  app.put('/api/time-entries/:id', requireAuth, async (req, res) => {
     try {
-      await updateTimeEntry(req.params.id, req.body);
+      await updateTimeEntry(req.orgId!, req.params.id, req.body);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
@@ -261,19 +267,21 @@ export function setupRoutes(app: Express): void {
   });
 
   // NEW: Activity Tracking Endpoints
-  
+
   // Receive activities from desktop app
-  app.post('/api/activity', async (req, res) => {
+  app.post('/api/activity', requireAnyAuth, async (req, res) => {
     try {
-      const { employeeId, activities } = req.body;
-      
+      const employeeId = req.tokenType === 'device' ? req.employeeId! : req.body.employeeId;
+      const { activities } = req.body;
+
       if (!employeeId || !Array.isArray(activities)) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Missing employeeId or activities array' 
+        return res.status(400).json({
+          success: false,
+          error: 'Missing employeeId or activities array'
         });
       }
 
+      const orgId = req.orgId!;
       let suspiciousCount = 0;
       const savedActivities: Activity[] = [];
 
@@ -343,7 +351,7 @@ export function setupRoutes(app: Express): void {
           createdAt: new Date().toISOString()
         };
 
-        await createActivity(activity);
+        await createActivity(orgId, activity);
         savedActivities.push(activity);
 
         if (activity.isSuspicious) {
@@ -370,17 +378,19 @@ export function setupRoutes(app: Express): void {
   });
 
   // Get activities for an employee
-  app.get('/api/activities', async (req, res) => {
+  app.get('/api/activities', requireAuth, async (req, res) => {
     try {
       let activities;
       if (req.query.employeeId) {
         activities = await getActivitiesByEmployee(
+          req.orgId!,
           req.query.employeeId as string,
           req.query.startDate as string,
           req.query.endDate as string
         );
       } else {
         activities = await getAllActivities(
+          req.orgId!,
           req.query.startDate as string,
           req.query.endDate as string
         );
@@ -392,9 +402,10 @@ export function setupRoutes(app: Express): void {
   });
 
   // Get suspicious activities
-  app.get('/api/activities/suspicious', async (req, res) => {
+  app.get('/api/activities/suspicious', requireAuth, async (req, res) => {
     try {
       const activities = await getSuspiciousActivities(
+        req.orgId!,
         req.query.employeeId as string | undefined,
         req.query.limit ? parseInt(req.query.limit as string) : 50
       );
@@ -405,9 +416,10 @@ export function setupRoutes(app: Express): void {
   });
 
   // Get activity statistics
-  app.get('/api/activities/stats', async (req, res) => {
+  app.get('/api/activities/stats', requireAuth, async (req, res) => {
     try {
       const stats = await getActivityStats(
+        req.orgId!,
         req.query.employeeId as string | undefined,
         req.query.startDate as string | undefined,
         req.query.endDate as string | undefined
@@ -419,9 +431,9 @@ export function setupRoutes(app: Express): void {
   });
 
   // Get employee activity with productivity metrics
-  app.get('/api/employees/activity', async (req, res) => {
+  app.get('/api/employees/activity', requireAuth, async (req, res) => {
     try {
-      const activities = await getEmployeeActivityStats();
+      const activities = await getEmployeeActivityStats(req.orgId!);
       res.json({ success: true, data: activities });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
@@ -429,15 +441,15 @@ export function setupRoutes(app: Express): void {
   });
 
   // Reports
-  app.get('/api/reports/summary', async (req, res) => {
+  app.get('/api/reports/summary', requireAuth, async (req, res) => {
     try {
       const { employeeId, projectId, startDate, endDate } = req.query;
-      
+
       let entries;
       if (employeeId) {
-        entries = await getTimeEntriesByEmployee(employeeId as string, startDate as string, endDate as string);
+        entries = await getTimeEntriesByEmployee(req.orgId!, employeeId as string, startDate as string, endDate as string);
       } else {
-        entries = await getAllTimeEntries(startDate as string, endDate as string);
+        entries = await getAllTimeEntries(req.orgId!, startDate as string, endDate as string);
       }
 
       if (projectId) {
@@ -462,21 +474,22 @@ export function setupRoutes(app: Express): void {
   });
 
   // NEW: Productivity report
-  app.get('/api/reports/productivity', async (req, res) => {
+  app.get('/api/reports/productivity', requireAuth, async (req, res) => {
     try {
       const { employeeId, startDate, endDate } = req.query;
-      
+
       if (!employeeId) {
         return res.status(400).json({ success: false, error: 'employeeId is required' });
       }
 
       const activities = await getActivitiesByEmployee(
+        req.orgId!,
         employeeId as string,
         startDate as string,
         endDate as string
       );
 
-      const employee = await getEmployeeById(employeeId as string);
+      const employee = await getEmployeeById(req.orgId!, employeeId as string);
 
       // Calculate category breakdown
       const categoryBreakdown: Record<string, number> = {};
@@ -512,11 +525,11 @@ export function setupRoutes(app: Express): void {
 
       // Group by day for trend
       const dailyMap = new Map<string, { productive: number; unproductive: number; idle: number; totalScore: number; count: number }>();
-      
+
       for (const activity of activities) {
         const date = activity.timestamp.split('T')[0];
         const existing = dailyMap.get(date) || { productive: 0, unproductive: 0, idle: 0, totalScore: 0, count: 0 };
-        
+
         if (activity.isIdle || activity.productivityLevel === 'idle') {
           existing.idle += activity.durationSeconds;
         } else if (activity.productivityLevel === 'productive') {
@@ -529,7 +542,7 @@ export function setupRoutes(app: Express): void {
           existing.totalScore += activity.productivityScore;
           existing.count++;
         }
-        
+
         dailyMap.set(date, existing);
       }
 
@@ -543,7 +556,7 @@ export function setupRoutes(app: Express): void {
 
       // Calculate true productivity (excluding idle time)
       const activeSeconds = productiveSeconds + unproductiveSeconds + neutralSeconds;
-      const trueProductivityScore = activeSeconds > 0 
+      const trueProductivityScore = activeSeconds > 0
         ? Math.round((productiveSeconds / activeSeconds) * 100)
         : 0;
 
@@ -582,7 +595,7 @@ export function setupRoutes(app: Express): void {
   // ==========================================
 
   // Get detected role for an employee
-  app.get('/api/roles/:employeeId', async (req, res) => {
+  app.get('/api/roles/:employeeId', requireAuth, async (req, res) => {
     try {
       const role = await detectEmployeeRole(req.params.employeeId);
       const status = await getRoleStatus(req.params.employeeId);
@@ -593,9 +606,9 @@ export function setupRoutes(app: Express): void {
   });
 
   // Get role status for all employees (for admin dashboard)
-  app.get('/api/roles', async (req, res) => {
+  app.get('/api/roles', requireAuth, async (req, res) => {
     try {
-      const employees = await getAllEmployees();
+      const employees = await getAllEmployees(req.orgId!);
       const roles = await Promise.all(
         employees.map(async (emp) => {
           const status = await getRoleStatus(emp.id);
@@ -609,7 +622,7 @@ export function setupRoutes(app: Express): void {
   });
 
   // Admin override: set role for an employee
-  app.put('/api/roles/:employeeId', async (req, res) => {
+  app.put('/api/roles/:employeeId', requireAuth, async (req, res) => {
     try {
       const { roleType } = req.body;
       const profile = ROLE_PROFILES.find(p => p.roleType === roleType);
@@ -638,7 +651,7 @@ export function setupRoutes(app: Express): void {
   });
 
   // List available role types
-  app.get('/api/role-types', (req, res) => {
+  app.get('/api/role-types', requireAuth, (req, res) => {
     res.json({
       success: true,
       data: ROLE_PROFILES.map(p => ({
@@ -652,7 +665,7 @@ export function setupRoutes(app: Express): void {
   });
 
   // Classification overrides
-  app.get('/api/overrides', async (req, res) => {
+  app.get('/api/overrides', requireAuth, async (req, res) => {
     try {
       const db = getDatabase();
       const overrides = await db.all('SELECT * FROM classification_overrides ORDER BY created_at DESC');
@@ -662,7 +675,7 @@ export function setupRoutes(app: Express): void {
     }
   });
 
-  app.post('/api/overrides', async (req, res) => {
+  app.post('/api/overrides', requireAuth, async (req, res) => {
     try {
       const { employeeId, roleType, appPattern, category, productivityScore } = req.body;
 
@@ -686,7 +699,7 @@ export function setupRoutes(app: Express): void {
     }
   });
 
-  app.delete('/api/overrides/:id', async (req, res) => {
+  app.delete('/api/overrides/:id', requireAuth, async (req, res) => {
     try {
       const db = getDatabase();
       await db.run('DELETE FROM classification_overrides WHERE id = ?', [req.params.id]);

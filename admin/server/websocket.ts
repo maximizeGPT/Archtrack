@@ -6,6 +6,7 @@ interface ConnectedClient {
   employeeId?: string;
   employeeName?: string;
   isAdmin?: boolean;
+  orgId?: string;
 }
 
 const clients = new Map<WebSocket, ConnectedClient>();
@@ -80,7 +81,7 @@ async function handleMessage(ws: WebSocket, message: any): Promise<void> {
       
       // Save to database
       try {
-        await createTimeEntry(message.entry);
+        await createTimeEntry(client.orgId || 'org-default', message.entry);
       } catch (err) {
         console.error('Error saving time entry:', err);
       }
@@ -103,7 +104,7 @@ async function handleMessage(ws: WebSocket, message: any): Promise<void> {
       
       // Update in database
       try {
-        await updateTimeEntry(message.entry.id, {
+        await updateTimeEntry(client.orgId || 'org-default', message.entry.id, {
           endTime: message.entry.endTime,
           duration: message.entry.duration,
           idleTime: message.entry.idleTime
@@ -141,7 +142,7 @@ async function handleMessage(ws: WebSocket, message: any): Promise<void> {
             if (existing) {
               await updateActivity(entry.id, entry);
             } else {
-              await createActivity(entry);
+              await createActivity(client.orgId || 'org-default', entry);
             }
             successCount++;
           } catch (err: any) {

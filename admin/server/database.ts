@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import type { Employee, Project, Task, TimeEntry, Activity, ProductivityReport } from '../shared-types.js';
+import { runMigrations } from './migrations.js';
 
 // ES module compatibility
 const __filename = fileURLToPath(import.meta.url);
@@ -27,6 +28,7 @@ export async function initDatabase(): Promise<Database<sqlite3.Database, sqlite3
   });
 
   await createTables();
+  await runMigrations(db);
   await seedTestData();
 
   return db;
@@ -218,49 +220,50 @@ async function seedTestData(): Promise<void> {
 }
 
 // Employee operations
-export async function getAllEmployees(): Promise<Employee[]> {
+export async function getAllEmployees(orgId: string): Promise<Employee[]> {
   const db = getDatabase();
-  const rows = await db.all('SELECT * FROM employees WHERE is_active = 1 ORDER BY name');
+  const rows = await db.all('SELECT * FROM employees WHERE is_active = 1 AND org_id = ? ORDER BY name', [orgId]);
   return rows.map(mapEmployee);
 }
 
-export async function getEmployeeById(id: string): Promise<Employee | null> {
+export async function getEmployeeById(orgId: string, id: string): Promise<Employee | null> {
   const db = getDatabase();
-  const row = await db.get('SELECT * FROM employees WHERE id = ?', id);
+  const row = await db.get('SELECT * FROM employees WHERE id = ? AND org_id = ?', [id, orgId]);
   return row ? mapEmployee(row) : null;
 }
 
 export async function createEmployee(employee: Employee): Promise<void> {
   const db = getDatabase();
   await db.run(
-    `INSERT INTO employees (id, name, email, role, department, hourly_rate, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [employee.id, employee.name, employee.email, employee.role, employee.department, employee.hourlyRate, employee.createdAt, employee.updatedAt]
+    `INSERT INTO employees (id, org_id, name, email, role, department, hourly_rate, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [employee.id, employee.orgId, employee.name, employee.email, employee.role, employee.department, employee.hourlyRate, employee.createdAt, employee.updatedAt]
   );
 }
 
-export async function updateEmployee(id: string, updates: Partial<Employee>): Promise<void> {
+export async function updateEmployee(orgId: string, id: string, updates: Partial<Employee>): Promise<void> {
   const db = getDatabase();
   const now = new Date().toISOString();
-  
+
   const sets: string[] = [];
   const values: any[] = [];
-  
+
   if (updates.name) { sets.push('name = ?'); values.push(updates.name); }
   if (updates.email) { sets.push('email = ?'); values.push(updates.email); }
   if (updates.role) { sets.push('role = ?'); values.push(updates.role); }
   if (updates.department) { sets.push('department = ?'); values.push(updates.department); }
   if (updates.hourlyRate !== undefined) { sets.push('hourly_rate = ?'); values.push(updates.hourlyRate); }
-  
+
   sets.push('updated_at = ?'); values.push(now);
   values.push(id);
-  
-  await db.run(`UPDATE employees SET ${sets.join(', ')} WHERE id = ?`, values);
+  values.push(orgId);
+
+  await db.run(`UPDATE employees SET ${sets.join(', ')} WHERE id = ? AND org_id = ?`, values);
 }
 
-export async function deleteEmployee(id: string): Promise<void> {
+export async function deleteEmployee(orgId: string, id: string): Promise<void> {
   const db = getDatabase();
-  await db.run('UPDATE employees SET is_active = 0 WHERE id = ?', id);
+  await db.run('UPDATE employees SET is_active = 0 WHERE id = ? AND org_id = ?', [id, orgId]);
 }
 
 function mapEmployee(row: any): Employee {
@@ -277,44 +280,45 @@ function mapEmployee(row: any): Employee {
 }
 
 // Project operations
-export async function getAllProjects(): Promise<Project[]> {
+export async function getAllProjects(orgId: string): Promise<Project[]> {
   const db = getDatabase();
-  const rows = await db.all('SELECT * FROM projects ORDER BY name');
+  const rows = await db.all('SELECT * FROM projects WHERE org_id = ? ORDER BY name', [orgId]);
   return rows.map(mapProject);
 }
 
-export async function getProjectById(id: string): Promise<Project | null> {
+export async function getProjectById(orgId: string, id: string): Promise<Project | null> {
   const db = getDatabase();
-  const row = await db.get('SELECT * FROM projects WHERE id = ?', id);
+  const row = await db.get('SELECT * FROM projects WHERE id = ? AND org_id = ?', [id, orgId]);
   return row ? mapProject(row) : null;
 }
 
 export async function createProject(project: Project): Promise<void> {
   const db = getDatabase();
   await db.run(
-    `INSERT INTO projects (id, name, description, client_name, status, start_date, end_date, budget, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [project.id, project.name, project.description, project.clientName, project.status, project.startDate, project.endDate, project.budget, project.createdAt, project.updatedAt]
+    `INSERT INTO projects (id, org_id, name, description, client_name, status, start_date, end_date, budget, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [project.id, project.orgId, project.name, project.description, project.clientName, project.status, project.startDate, project.endDate, project.budget, project.createdAt, project.updatedAt]
   );
 }
 
-export async function updateProject(id: string, updates: Partial<Project>): Promise<void> {
+export async function updateProject(orgId: string, id: string, updates: Partial<Project>): Promise<void> {
   const db = getDatabase();
   const now = new Date().toISOString();
-  
+
   const sets: string[] = [];
   const values: any[] = [];
-  
+
   if (updates.name) { sets.push('name = ?'); values.push(updates.name); }
   if (updates.description) { sets.push('description = ?'); values.push(updates.description); }
   if (updates.clientName) { sets.push('client_name = ?'); values.push(updates.clientName); }
   if (updates.status) { sets.push('status = ?'); values.push(updates.status); }
   if (updates.budget !== undefined) { sets.push('budget = ?'); values.push(updates.budget); }
-  
+
   sets.push('updated_at = ?'); values.push(now);
   values.push(id);
-  
-  await db.run(`UPDATE projects SET ${sets.join(', ')} WHERE id = ?`, values);
+
+  values.push(orgId);
+  await db.run(`UPDATE projects SET ${sets.join(', ')} WHERE id = ? AND org_id = ?`, values);
 }
 
 function mapProject(row: any): Project {
@@ -333,44 +337,45 @@ function mapProject(row: any): Project {
 }
 
 // Task operations
-export async function getAllTasks(): Promise<Task[]> {
+export async function getAllTasks(orgId: string): Promise<Task[]> {
   const db = getDatabase();
-  const rows = await db.all('SELECT * FROM tasks ORDER BY updated_at DESC');
+  const rows = await db.all('SELECT * FROM tasks WHERE org_id = ? ORDER BY updated_at DESC', [orgId]);
   return rows.map(mapTask);
 }
 
-export async function getTasksByProject(projectId: string): Promise<Task[]> {
+export async function getTasksByProject(orgId: string, projectId: string): Promise<Task[]> {
   const db = getDatabase();
-  const rows = await db.all('SELECT * FROM tasks WHERE project_id = ?', projectId);
+  const rows = await db.all('SELECT * FROM tasks WHERE project_id = ? AND org_id = ?', [projectId, orgId]);
   return rows.map(mapTask);
 }
 
 export async function createTask(task: Task): Promise<void> {
   const db = getDatabase();
   await db.run(
-    `INSERT INTO tasks (id, project_id, name, description, status, priority, estimated_hours, assigned_to, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [task.id, task.projectId, task.name, task.description, task.status, task.priority, task.estimatedHours, task.assignedTo, task.createdAt, task.updatedAt]
+    `INSERT INTO tasks (id, org_id, project_id, name, description, status, priority, estimated_hours, assigned_to, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [task.id, task.orgId, task.projectId, task.name, task.description, task.status, task.priority, task.estimatedHours, task.assignedTo, task.createdAt, task.updatedAt]
   );
 }
 
-export async function updateTask(id: string, updates: Partial<Task>): Promise<void> {
+export async function updateTask(orgId: string, id: string, updates: Partial<Task>): Promise<void> {
   const db = getDatabase();
   const now = new Date().toISOString();
-  
+
   const sets: string[] = [];
   const values: any[] = [];
-  
+
   if (updates.name) { sets.push('name = ?'); values.push(updates.name); }
   if (updates.description) { sets.push('description = ?'); values.push(updates.description); }
   if (updates.status) { sets.push('status = ?'); values.push(updates.status); }
   if (updates.priority) { sets.push('priority = ?'); values.push(updates.priority); }
   if (updates.assignedTo) { sets.push('assigned_to = ?'); values.push(updates.assignedTo); }
-  
+
   sets.push('updated_at = ?'); values.push(now);
   values.push(id);
-  
-  await db.run(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ?`, values);
+
+  values.push(orgId);
+  await db.run(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ? AND org_id = ?`, values);
 }
 
 function mapTask(row: any): Task {
@@ -388,17 +393,18 @@ function mapTask(row: any): Task {
   };
 }
 
-// NEW: Activity operations
-export async function createActivity(activity: Activity): Promise<void> {
+// Activity operations
+export async function createActivity(orgId: string, activity: Activity): Promise<void> {
   const db = getDatabase();
   await db.run(
     `INSERT INTO activities (
-      id, employee_id, timestamp, app_name, window_title, 
+      id, org_id, employee_id, timestamp, app_name, window_title,
       category, category_name, productivity_score, productivity_level,
       is_suspicious, suspicious_reason, is_idle, idle_time_seconds, duration_seconds, created_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       activity.id,
+      orgId,
       activity.employeeId,
       activity.timestamp,
       activity.appName,
@@ -449,13 +455,14 @@ export async function updateActivity(id: string, updates: Partial<Activity>): Pr
 }
 
 export async function getActivitiesByEmployee(
-  employeeId: string, 
-  startDate?: string, 
+  orgId: string,
+  employeeId: string,
+  startDate?: string,
   endDate?: string
 ): Promise<Activity[]> {
   const db = getDatabase();
-  let query = 'SELECT * FROM activities WHERE employee_id = ?';
-  const params: any[] = [employeeId];
+  let query = 'SELECT * FROM activities WHERE employee_id = ? AND org_id = ?';
+  const params: any[] = [employeeId, orgId];
   
   if (startDate) {
     query += ' AND timestamp >= ?';
@@ -472,21 +479,18 @@ export async function getActivitiesByEmployee(
   return rows.map(mapActivity);
 }
 
-export async function getAllActivities(startDate?: string, endDate?: string): Promise<Activity[]> {
+export async function getAllActivities(orgId: string, startDate?: string, endDate?: string): Promise<Activity[]> {
   const db = getDatabase();
   let query = 'SELECT * FROM activities';
   const params: any[] = [];
-  
-  if (startDate || endDate) {
-    query += ' WHERE';
-    if (startDate) {
-      query += ' timestamp >= ?';
-      params.push(startDate);
-    }
-    if (endDate) {
-      query += startDate ? ' AND timestamp <= ?' : ' timestamp <= ?';
-      params.push(endDate);
-    }
+  const conditions: string[] = [];
+
+  conditions.push('org_id = ?'); params.push(orgId);
+  if (startDate) { conditions.push('timestamp >= ?'); params.push(startDate); }
+  if (endDate) { conditions.push('timestamp <= ?'); params.push(endDate); }
+
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
   }
   
   query += ' ORDER BY timestamp DESC';
@@ -495,19 +499,15 @@ export async function getAllActivities(startDate?: string, endDate?: string): Pr
   return rows.map(mapActivity);
 }
 
-export async function getSuspiciousActivities(employeeId?: string, limit: number = 50): Promise<Activity[]> {
+export async function getSuspiciousActivities(orgId: string, employeeId?: string, limit: number = 50): Promise<Activity[]> {
   const db = getDatabase();
-  // Filter out system/idle apps that shouldn't be marked as suspicious
   const systemApps = ['loginwindow', 'lockscreen', 'screensaver', 'window server', 'idle'];
   const appExclusions = systemApps.map(app => `LOWER(app_name) != '${app}'`).join(' AND ');
-  
-  let query = `SELECT * FROM activities WHERE is_suspicious = 1 AND ${appExclusions}`;
-  const params: any[] = [];
-  
-  if (employeeId) {
-    query += ' AND employee_id = ?';
-    params.push(employeeId);
-  }
+
+  let query = `SELECT * FROM activities WHERE is_suspicious = 1 AND ${appExclusions} AND org_id = ?`;
+  const params: any[] = [orgId];
+
+  if (employeeId) { query += ' AND employee_id = ?'; params.push(employeeId); }
   
   query += ' ORDER BY timestamp DESC LIMIT ?';
   params.push(limit);
@@ -516,28 +516,18 @@ export async function getSuspiciousActivities(employeeId?: string, limit: number
   return rows.map(mapActivity);
 }
 
-export async function getActivityStats(employeeId?: string, startDate?: string, endDate?: string): Promise<any> {
+export async function getActivityStats(orgId: string, employeeId?: string, startDate?: string, endDate?: string): Promise<any> {
   const db = getDatabase();
-  
-  let whereClause = '';
+
+  const conditions: string[] = [];
   const params: any[] = [];
-  
-  if (employeeId || startDate || endDate) {
-    const conditions: string[] = [];
-    if (employeeId) {
-      conditions.push('employee_id = ?');
-      params.push(employeeId);
-    }
-    if (startDate) {
-      conditions.push('timestamp >= ?');
-      params.push(startDate);
-    }
-    if (endDate) {
-      conditions.push('timestamp <= ?');
-      params.push(endDate);
-    }
-    whereClause = 'WHERE ' + conditions.join(' AND ');
-  }
+
+  conditions.push('org_id = ?'); params.push(orgId);
+  if (employeeId) { conditions.push('employee_id = ?'); params.push(employeeId); }
+  if (startDate) { conditions.push('timestamp >= ?'); params.push(startDate); }
+  if (endDate) { conditions.push('timestamp <= ?'); params.push(endDate); }
+
+  const whereClause = conditions.length > 0 ? 'WHERE ' + conditions.join(' AND ') : '';
   
   // Category breakdown
   const categoryStats = await db.all(
@@ -551,8 +541,9 @@ export async function getActivityStats(employeeId?: string, startDate?: string, 
   );
   
   // Suspicious count
+  const suspiciousWhere = whereClause ? `${whereClause} AND is_suspicious = 1` : 'WHERE is_suspicious = 1';
   const suspiciousCount = await db.get(
-    `SELECT COUNT(*) as count FROM activities ${whereClause} AND is_suspicious = 1`,
+    `SELECT COUNT(*) as count FROM activities ${suspiciousWhere}`,
     params
   );
   
@@ -590,21 +581,18 @@ function mapActivity(row: any): Activity {
 }
 
 // Legacy Time Entry operations (kept for compatibility)
-export async function getAllTimeEntries(startDate?: string, endDate?: string): Promise<TimeEntry[]> {
+export async function getAllTimeEntries(orgId: string, startDate?: string, endDate?: string): Promise<TimeEntry[]> {
   const db = getDatabase();
-  let query = 'SELECT * FROM time_entries';
+  const conditions: string[] = [];
   const params: any[] = [];
-  
-  if (startDate || endDate) {
-    query += ' WHERE';
-    if (startDate) {
-      query += ' start_time >= ?';
-      params.push(startDate);
-    }
-    if (endDate) {
-      query += startDate ? ' AND start_time <= ?' : ' start_time <= ?';
-      params.push(endDate);
-    }
+
+  conditions.push('org_id = ?'); params.push(orgId);
+  if (startDate) { conditions.push('start_time >= ?'); params.push(startDate); }
+  if (endDate) { conditions.push('start_time <= ?'); params.push(endDate); }
+
+  let query = 'SELECT * FROM time_entries';
+  if (conditions.length > 0) {
+    query += ' WHERE ' + conditions.join(' AND ');
   }
   
   query += ' ORDER BY start_time DESC';
@@ -613,10 +601,10 @@ export async function getAllTimeEntries(startDate?: string, endDate?: string): P
   return rows.map(mapTimeEntry);
 }
 
-export async function getTimeEntriesByEmployee(employeeId: string, startDate?: string, endDate?: string): Promise<TimeEntry[]> {
+export async function getTimeEntriesByEmployee(orgId: string, employeeId: string, startDate?: string, endDate?: string): Promise<TimeEntry[]> {
   const db = getDatabase();
-  let query = 'SELECT * FROM time_entries WHERE employee_id = ?';
-  const params: any[] = [employeeId];
+  let query = 'SELECT * FROM time_entries WHERE employee_id = ? AND org_id = ?';
+  const params: any[] = [employeeId, orgId];
   
   if (startDate) {
     query += ' AND start_time >= ?';
@@ -633,7 +621,7 @@ export async function getTimeEntriesByEmployee(employeeId: string, startDate?: s
   return rows.map(mapTimeEntry);
 }
 
-export async function createTimeEntry(entry: TimeEntry): Promise<void> {
+export async function createTimeEntry(orgId: string, entry: TimeEntry): Promise<void> {
   const db = getDatabase();
   await db.run(
     `INSERT INTO time_entries (id, employee_id, task_id, project_id, description, start_time, end_time, duration, is_billable, idle_time, created_at, updated_at)
@@ -642,7 +630,7 @@ export async function createTimeEntry(entry: TimeEntry): Promise<void> {
   );
 }
 
-export async function updateTimeEntry(id: string, updates: Partial<TimeEntry>): Promise<void> {
+export async function updateTimeEntry(orgId: string, id: string, updates: Partial<TimeEntry>): Promise<void> {
   const db = getDatabase();
   const now = new Date().toISOString();
   
@@ -659,9 +647,9 @@ export async function updateTimeEntry(id: string, updates: Partial<TimeEntry>): 
   await db.run(`UPDATE time_entries SET ${sets.join(', ')} WHERE id = ?`, values);
 }
 
-export async function getActiveTimeEntries(): Promise<TimeEntry[]> {
+export async function getActiveTimeEntries(orgId: string): Promise<TimeEntry[]> {
   const db = getDatabase();
-  const rows = await db.all('SELECT * FROM time_entries WHERE end_time IS NULL');
+  const rows = await db.all('SELECT * FROM time_entries WHERE end_time IS NULL AND org_id = ?', [orgId]);
   return rows.map(mapTimeEntry);
 }
 
@@ -689,26 +677,25 @@ function mapTimeEntry(row: any): TimeEntry {
 }
 
 // Dashboard stats with timeout protection
-export async function getDashboardStats(): Promise<any> {
+export async function getDashboardStats(orgId: string): Promise<any> {
   const db = getDatabase();
-  
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayStr = today.toISOString();
-  
+
   const weekAgo = new Date(today);
   weekAgo.setDate(weekAgo.getDate() - 7);
   const weekAgoStr = weekAgo.toISOString();
-  
+
   const monthAgo = new Date(today);
   monthAgo.setMonth(monthAgo.getMonth() - 1);
   const monthAgoStr = monthAgo.toISOString();
 
-  // Helper to add timeout to promises
   const withTimeout = <T>(promise: Promise<T>, ms: number, defaultValue: T): Promise<T> => {
     return Promise.race([
       promise,
-      new Promise<T>((_, reject) => 
+      new Promise<T>((_, reject) =>
         setTimeout(() => reject(new Error(`Query timeout after ${ms}ms`)), ms)
       )
     ]).catch(err => {
@@ -718,19 +705,19 @@ export async function getDashboardStats(): Promise<any> {
   };
 
   const [totalEmployees, activeProjects, todayHours, weekHours, monthHours, recentActivities, suspiciousCount, productivityStats] = await Promise.all([
-    withTimeout(db.get('SELECT COUNT(*) as count FROM employees WHERE is_active = 1'), 5000, { count: 0 }),
-    withTimeout(db.get('SELECT COUNT(*) as count FROM projects WHERE status = "active"'), 5000, { count: 0 }),
-    withTimeout(db.get('SELECT COALESCE(SUM(duration_seconds), 0) as total FROM activities WHERE timestamp >= ?', todayStr), 5000, { total: 0 }),
-    withTimeout(db.get('SELECT COALESCE(SUM(duration_seconds), 0) as total FROM activities WHERE timestamp >= ?', weekAgoStr), 5000, { total: 0 }),
-    withTimeout(db.get('SELECT COALESCE(SUM(duration_seconds), 0) as total FROM activities WHERE timestamp >= ?', monthAgoStr), 5000, { total: 0 }),
-    withTimeout(db.all('SELECT * FROM activities ORDER BY timestamp DESC LIMIT 20'), 5000, []),
-    withTimeout(db.get('SELECT COUNT(*) as count FROM activities WHERE timestamp >= ? AND is_suspicious = 1', todayStr), 5000, { count: 0 }),
+    withTimeout(db.get('SELECT COUNT(*) as count FROM employees WHERE is_active = 1 AND org_id = ?', [orgId]), 5000, { count: 0 }),
+    withTimeout(db.get('SELECT COUNT(*) as count FROM projects WHERE status = "active" AND org_id = ?', [orgId]), 5000, { count: 0 }),
+    withTimeout(db.get('SELECT COALESCE(SUM(duration_seconds), 0) as total FROM activities WHERE timestamp >= ? AND org_id = ?', [todayStr, orgId]), 5000, { total: 0 }),
+    withTimeout(db.get('SELECT COALESCE(SUM(duration_seconds), 0) as total FROM activities WHERE timestamp >= ? AND org_id = ?', [weekAgoStr, orgId]), 5000, { total: 0 }),
+    withTimeout(db.get('SELECT COALESCE(SUM(duration_seconds), 0) as total FROM activities WHERE timestamp >= ? AND org_id = ?', [monthAgoStr, orgId]), 5000, { total: 0 }),
+    withTimeout(db.all('SELECT * FROM activities WHERE org_id = ? ORDER BY timestamp DESC LIMIT 20', [orgId]), 5000, []),
+    withTimeout(db.get('SELECT COUNT(*) as count FROM activities WHERE timestamp >= ? AND is_suspicious = 1 AND org_id = ?', [todayStr, orgId]), 5000, { count: 0 }),
     withTimeout(db.all(`
-      SELECT category, SUM(duration_seconds) as total_seconds 
-      FROM activities 
-      WHERE timestamp >= ? 
+      SELECT category, SUM(duration_seconds) as total_seconds
+      FROM activities
+      WHERE timestamp >= ? AND org_id = ?
       GROUP BY category
-    `, todayStr), 5000, [])
+    `, [todayStr, orgId]), 5000, [])
   ]);
 
   // Build productivity breakdown with new universal categories
@@ -778,33 +765,30 @@ export async function getDashboardStats(): Promise<any> {
     }
   }
 
-  // Calculate average productivity score (with timeout)
   const avgScore = await withTimeout(
-    db.get('SELECT AVG(productivity_score) as score FROM activities WHERE timestamp >= ?', todayStr),
+    db.get('SELECT AVG(productivity_score) as score FROM activities WHERE timestamp >= ? AND org_id = ?', [todayStr, orgId]),
     5000,
     { score: 0 }
   );
 
-  // Calculate focus vs distracted time (with timeout)
   const focusTime = await withTimeout(
-    db.get(`SELECT COALESCE(SUM(duration_seconds), 0) as total 
-     FROM activities 
-     WHERE timestamp >= ? AND productivity_level = 'productive' AND is_suspicious = 0`, todayStr),
+    db.get(`SELECT COALESCE(SUM(duration_seconds), 0) as total
+     FROM activities
+     WHERE timestamp >= ? AND productivity_level = 'productive' AND is_suspicious = 0 AND org_id = ?`, [todayStr, orgId]),
     5000,
     { total: 0 }
   );
 
   const distractedTime = await withTimeout(
-    db.get(`SELECT COALESCE(SUM(duration_seconds), 0) as total 
-     FROM activities 
-     WHERE timestamp >= ? AND (productivity_level = 'unproductive' OR is_suspicious = 1)`, todayStr),
+    db.get(`SELECT COALESCE(SUM(duration_seconds), 0) as total
+     FROM activities
+     WHERE timestamp >= ? AND (productivity_level = 'unproductive' OR is_suspicious = 1) AND org_id = ?`, [todayStr, orgId]),
     5000,
     { total: 0 }
   );
 
-  // Get employee activity stats (with timeout)
   const employeeActivity = await withTimeout(
-    getEmployeeActivityStats(),
+    getEmployeeActivityStats(orgId),
     5000,
     []
   );
@@ -826,14 +810,14 @@ export async function getDashboardStats(): Promise<any> {
 }
 
 // Get employee activity with productivity metrics
-export async function getEmployeeActivityStats(): Promise<any[]> {
+export async function getEmployeeActivityStats(orgId: string): Promise<any[]> {
   const db = getDatabase();
-  
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const todayStr = today.toISOString();
-  
-  const employees = await db.all('SELECT id, name FROM employees WHERE is_active = 1');
+
+  const employees = await db.all('SELECT id, name FROM employees WHERE is_active = 1 AND org_id = ?', [orgId]);
   
   const results = [];
   for (const emp of employees) {

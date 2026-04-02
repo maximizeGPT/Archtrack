@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { Employee } from '../../../shared-types';
+import { api } from '../lib/api';
 
 export const Employees: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -8,6 +9,7 @@ export const Employees: React.FC = () => {
   const [formError, setFormError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [setupToken, setSetupToken] = useState<{ token: string; employeeName: string } | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -23,11 +25,7 @@ export const Employees: React.FC = () => {
   const loadEmployees = async () => {
     try {
       setError(null);
-      const res = await fetch('/api/employees');
-      if (!res.ok) {
-        throw new Error(`Failed to load employees: ${res.status}`);
-      }
-      const data = await res.json();
+      const data = await api.get('/api/employees');
       if (data.success) {
         setEmployees(data.data);
       } else {
@@ -63,24 +61,16 @@ export const Employees: React.FC = () => {
       ? `/api/employees/${editingEmployee.id}`
       : '/api/employees';
 
-    const method = editingEmployee ? 'PUT' : 'POST';
-
     try {
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          hourlyRate: parseFloat(formData.hourlyRate) || 0
-        })
-      });
+      const payload = {
+        ...formData,
+        hourlyRate: parseFloat(formData.hourlyRate) || 0
+      };
 
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to save employee: ${res.status}`);
-      }
+      const data = editingEmployee
+        ? await api.put(url, payload)
+        : await api.post(url, payload);
 
-      const data = await res.json();
       if (data.success) {
         setShowForm(false);
         setEditingEmployee(null);
@@ -111,12 +101,7 @@ export const Employees: React.FC = () => {
     if (!confirm('Are you sure you want to delete this employee?')) return;
 
     try {
-      const res = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `Failed to delete employee: ${res.status}`);
-      }
-      const data = await res.json();
+      const data = await api.delete(`/api/employees/${id}`);
       if (data.success) {
         loadEmployees();
       } else {
@@ -125,6 +110,16 @@ export const Employees: React.FC = () => {
     } catch (err) {
       console.error('Error deleting employee:', err);
       setError(err instanceof Error ? err.message : 'Failed to delete employee');
+    }
+  };
+
+  const handleGenerateSetupToken = async (employee: Employee) => {
+    try {
+      const data = await api.post('/api/auth/setup-token', { employeeId: employee.id });
+      setSetupToken({ token: data.token || data.setupToken, employeeName: employee.name });
+    } catch (err) {
+      console.error('Error generating setup token:', err);
+      alert(err instanceof Error ? err.message : 'Failed to generate setup token');
     }
   };
 
@@ -151,7 +146,7 @@ export const Employees: React.FC = () => {
     <div style={styles.container}>
       <header style={styles.header}>
         <h1 style={styles.title}>Employees</h1>
-        <button 
+        <button
           style={styles.addButton}
           onClick={() => {
             setEditingEmployee(null);
@@ -237,8 +232,8 @@ export const Employees: React.FC = () => {
                 />
               </div>
               <div style={styles.formButtons}>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => setShowForm(false)}
                   style={styles.cancelButton}
                 >
@@ -249,6 +244,74 @@ export const Employees: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Setup Token Modal */}
+      {setupToken && (
+        <div
+          style={styles.modal}
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setSetupToken(null)}
+        >
+          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+            <h2 style={styles.modalTitle}>Setup Token</h2>
+            <p style={{ color: '#555', fontSize: '14px', marginBottom: '12px' }}>
+              Setup token for <strong>{setupToken.employeeName}</strong>:
+            </p>
+            <div style={{
+              backgroundColor: '#f8f9fa',
+              border: '1px solid #e0e0e0',
+              borderRadius: '8px',
+              padding: '16px',
+              fontFamily: 'monospace',
+              fontSize: '13px',
+              wordBreak: 'break-all',
+              color: '#2c3e50',
+              marginBottom: '16px',
+            }}>
+              {setupToken.token}
+            </div>
+            <p style={{ color: '#999', fontSize: '12px', marginBottom: '16px' }}>
+              Share this token with the employee so they can set up their account.
+            </p>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(setupToken.token);
+                }}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  backgroundColor: '#3498db',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                }}
+              >
+                Copy Token
+              </button>
+              <button
+                onClick={() => setSetupToken(null)}
+                style={{
+                  flex: 1,
+                  padding: '10px',
+                  backgroundColor: '#ecf0f1',
+                  color: '#333',
+                  border: 'none',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                }}
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -268,6 +331,9 @@ export const Employees: React.FC = () => {
             <div style={styles.cardActions}>
               <button onClick={() => handleEdit(employee)} style={styles.editButton}>
                 Edit
+              </button>
+              <button onClick={() => handleGenerateSetupToken(employee)} style={styles.setupButton}>
+                Setup Token
               </button>
               <button onClick={() => handleDelete(employee.id)} style={styles.deleteButton}>
                 Delete
@@ -468,6 +534,16 @@ const styles: { [key: string]: React.CSSProperties | any } = {
     flex: 1,
     padding: '8px',
     backgroundColor: '#3498db',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '13px'
+  },
+  setupButton: {
+    flex: 1,
+    padding: '8px',
+    backgroundColor: '#8e44ad',
     color: '#fff',
     border: 'none',
     borderRadius: '6px',

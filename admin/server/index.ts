@@ -11,6 +11,7 @@ import { setupRoutes } from './routes.js';
 import { setupWebSocket } from './websocket.js';
 import aiRoutes from './routes/ai-routes.js';
 import aiLLMRoutes from './routes/ai-routes-llm.js';
+import { setupAuthRoutes } from './routes/auth-routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -97,10 +98,11 @@ async function startServer() {
     
     // Step 3: Setup API routes
     console.log('🛣️  Setting up API routes...');
+    setupAuthRoutes(app);  // Auth routes first (signup/login are public)
     setupRoutes(app);
     app.use('/api/ai', aiRoutes);
     app.use('/api/ai-llm', aiLLMRoutes);
-    console.log('✅ API routes configured (including LLM)');
+    console.log('✅ API routes configured (including auth + LLM)');
     
     // Step 4: Find and serve static files
     const staticPath = findStaticPath();
