@@ -20,15 +20,23 @@ import {
   updateTimeEntry,
   getActiveTimeEntries,
   getDashboardStats,
-  // NEW: Activity tracking functions
+  // Activity tracking functions
   createActivity,
   getActivitiesByEmployee,
   getAllActivities,
   getSuspiciousActivities,
   getActivityStats,
-  getEmployeeActivityStats
+  getEmployeeActivityStats,
+  getDatabase
 } from './database.js';
 import type { Activity } from '../shared-types.js';
+import {
+  detectEmployeeRole,
+  reclassifyForRole,
+  applyOverrides,
+  getRoleStatus,
+  ROLE_PROFILES
+} from './role-detector.js';
 
 export function setupRoutes(app: Express): void {
   // Health check
@@ -269,17 +277,64 @@ export function setupRoutes(app: Express): void {
       let suspiciousCount = 0;
       const savedActivities: Activity[] = [];
 
+      // Get detected role for this employee (for smart reclassification)
+      let detectedRole: { roleType: string; status: string } = { roleType: 'unknown', status: 'learning' };
+      try {
+        const roleStatus = await getRoleStatus(employeeId);
+        detectedRole = { roleType: roleStatus.roleType, status: roleStatus.status };
+      } catch (e) {
+        // Role detection not ready yet — use original classification
+      }
+
       for (const activityData of activities) {
+        let category = activityData.category;
+        let categoryName = activityData.categoryName;
+        let productivityScore = activityData.productivityScore;
+        let productivityLevel = activityData.productivityLevel;
+
+        // Apply role-based reclassification if role is detected or overridden
+        if (detectedRole.roleType !== 'unknown' && detectedRole.status !== 'learning') {
+          const reclassified = reclassifyForRole(
+            detectedRole.roleType,
+            activityData.appName,
+            activityData.windowTitle,
+            category,
+            productivityScore
+          );
+          category = reclassified.category;
+          categoryName = reclassified.categoryName;
+          productivityScore = reclassified.productivityScore;
+          productivityLevel = reclassified.productivityLevel as Activity['productivityLevel'];
+        }
+
+        // Apply admin overrides (highest priority)
+        try {
+          const overridden = await applyOverrides(
+            employeeId,
+            detectedRole.roleType,
+            activityData.appName,
+            activityData.windowTitle,
+            category,
+            productivityScore
+          );
+          category = overridden.category;
+          categoryName = overridden.categoryName;
+          productivityScore = overridden.productivityScore;
+          productivityLevel = overridden.productivityLevel as Activity['productivityLevel'];
+        } catch (e) {
+          // Override table may not exist yet on first run
+        }
+
         const activity: Activity = {
           id: activityData.id || uuidv4(),
           employeeId,
           timestamp: activityData.timestamp,
           appName: activityData.appName,
           windowTitle: activityData.windowTitle,
-          category: activityData.category,
-          categoryName: activityData.categoryName,
-          productivityScore: activityData.productivityScore,
-          productivityLevel: activityData.productivityLevel,
+          category,
+          categoryName,
+          productivityScore,
+          productivityLevel,
           isSuspicious: activityData.isSuspicious || false,
           suspiciousReason: activityData.suspiciousReason,
           isIdle: activityData.isIdle || false,
@@ -296,11 +351,17 @@ export function setupRoutes(app: Express): void {
         }
       }
 
-      res.json({ 
-        success: true, 
-        data: { 
+      // Trigger role detection in background (non-blocking)
+      detectEmployeeRole(employeeId).catch(e => {
+        console.warn('Role detection failed:', e.message);
+      });
+
+      res.json({
+        success: true,
+        data: {
           syncedCount: savedActivities.length,
-          suspiciousCount 
+          suspiciousCount,
+          detectedRole: detectedRole.roleType !== 'unknown' ? detectedRole : undefined
         }
       });
     } catch (error) {
@@ -489,7 +550,7 @@ export function setupRoutes(app: Express): void {
       res.json({
         success: true,
         data: {
-          employeeId,
+          employeeId: employeeId as string,
           employeeName: employee?.name || 'Unknown',
           dateRange: { start: startDate, end: endDate },
           summary: {
@@ -511,6 +572,125 @@ export function setupRoutes(app: Express): void {
           dailyTrend
         }
       });
+    } catch (error) {
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+
+  // ==========================================
+  // Smart Role Detection Endpoints
+  // ==========================================
+
+  // Get detected role for an employee
+  app.get('/api/roles/:employeeId', async (req, res) => {
+    try {
+      const role = await detectEmployeeRole(req.params.employeeId);
+      const status = await getRoleStatus(req.params.employeeId);
+      res.json({ success: true, data: { ...role, learningProgress: status.learningProgress, hoursTracked: status.hoursTracked } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+
+  // Get role status for all employees (for admin dashboard)
+  app.get('/api/roles', async (req, res) => {
+    try {
+      const employees = await getAllEmployees();
+      const roles = await Promise.all(
+        employees.map(async (emp) => {
+          const status = await getRoleStatus(emp.id);
+          return { employeeId: emp.id, employeeName: emp.name, ...status };
+        })
+      );
+      res.json({ success: true, data: roles });
+    } catch (error) {
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+
+  // Admin override: set role for an employee
+  app.put('/api/roles/:employeeId', async (req, res) => {
+    try {
+      const { roleType } = req.body;
+      const profile = ROLE_PROFILES.find(p => p.roleType === roleType);
+
+      if (!profile) {
+        return res.status(400).json({
+          success: false,
+          error: `Unknown role type. Valid types: ${ROLE_PROFILES.map(p => p.roleType).join(', ')}`
+        });
+      }
+
+      const db = getDatabase();
+      const now = new Date().toISOString();
+
+      await db.run(
+        `INSERT OR REPLACE INTO role_profiles
+         (employee_id, role_type, display_name, confidence, status, detected_at, learning_started_at, updated_at)
+         VALUES (?, ?, ?, 100, 'admin_override', ?, ?, ?)`,
+        [req.params.employeeId, roleType, profile.displayName, now, now, now]
+      );
+
+      res.json({ success: true, data: { employeeId: req.params.employeeId, roleType, displayName: profile.displayName, status: 'admin_override' } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+
+  // List available role types
+  app.get('/api/role-types', (req, res) => {
+    res.json({
+      success: true,
+      data: ROLE_PROFILES.map(p => ({
+        roleType: p.roleType,
+        displayName: p.displayName,
+        description: p.description,
+        coreApps: p.coreApps.slice(0, 10), // Show first 10
+        signatureThreshold: p.signatureThreshold
+      }))
+    });
+  });
+
+  // Classification overrides
+  app.get('/api/overrides', async (req, res) => {
+    try {
+      const db = getDatabase();
+      const overrides = await db.all('SELECT * FROM classification_overrides ORDER BY created_at DESC');
+      res.json({ success: true, data: overrides });
+    } catch (error) {
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+
+  app.post('/api/overrides', async (req, res) => {
+    try {
+      const { employeeId, roleType, appPattern, category, productivityScore } = req.body;
+
+      if (!appPattern || !category || productivityScore === undefined) {
+        return res.status(400).json({ success: false, error: 'appPattern, category, and productivityScore are required' });
+      }
+
+      const db = getDatabase();
+      const id = uuidv4();
+      const now = new Date().toISOString();
+
+      await db.run(
+        `INSERT INTO classification_overrides (id, employee_id, role_type, app_pattern, category, productivity_score, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [id, employeeId || null, roleType || null, appPattern, category, productivityScore, now]
+      );
+
+      res.json({ success: true, data: { id, employeeId, roleType, appPattern, category, productivityScore } });
+    } catch (error) {
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+
+  app.delete('/api/overrides/:id', async (req, res) => {
+    try {
+      const db = getDatabase();
+      await db.run('DELETE FROM classification_overrides WHERE id = ?', [req.params.id]);
+      res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
     }

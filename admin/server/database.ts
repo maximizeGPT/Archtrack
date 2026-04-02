@@ -123,12 +123,39 @@ async function createTables(): Promise<void> {
       FOREIGN KEY (project_id) REFERENCES projects(id)
     );
 
+    -- Smart Role Detection: stores detected/overridden role per employee
+    CREATE TABLE IF NOT EXISTS role_profiles (
+      employee_id TEXT PRIMARY KEY,
+      role_type TEXT NOT NULL DEFAULT 'unknown',
+      display_name TEXT NOT NULL DEFAULT 'Not yet detected',
+      confidence INTEGER DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'learning',
+      detected_at TEXT,
+      learning_started_at TEXT,
+      updated_at TEXT NOT NULL,
+      FOREIGN KEY (employee_id) REFERENCES employees(id)
+    );
+
+    -- Classification overrides: admin can override app categorization per employee or role
+    CREATE TABLE IF NOT EXISTS classification_overrides (
+      id TEXT PRIMARY KEY,
+      employee_id TEXT,
+      role_type TEXT,
+      app_pattern TEXT NOT NULL,
+      category TEXT NOT NULL,
+      productivity_score INTEGER NOT NULL,
+      created_by TEXT DEFAULT 'admin',
+      created_at TEXT NOT NULL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_activities_employee ON activities(employee_id);
     CREATE INDEX IF NOT EXISTS idx_activities_timestamp ON activities(timestamp);
     CREATE INDEX IF NOT EXISTS idx_activities_category ON activities(category);
     CREATE INDEX IF NOT EXISTS idx_time_entries_employee ON time_entries(employee_id);
     CREATE INDEX IF NOT EXISTS idx_time_entries_start ON time_entries(start_time);
     CREATE INDEX IF NOT EXISTS idx_tasks_assigned ON tasks(assigned_to);
+    CREATE INDEX IF NOT EXISTS idx_overrides_employee ON classification_overrides(employee_id);
+    CREATE INDEX IF NOT EXISTS idx_overrides_role ON classification_overrides(role_type);
   `);
 }
 
