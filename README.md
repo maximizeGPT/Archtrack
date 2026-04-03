@@ -19,95 +19,67 @@ ArchTrack is an open-source employee tracking SaaS. See who's working, what they
 
 ---
 
-## Quick Start (5 minutes)
+## Getting Started (2 minutes)
 
-### 1. Get a Server
+### 1. Sign Up
 
-Create a [DigitalOcean](https://www.digitalocean.com) account and spin up a Droplet:
-- **Image:** Ubuntu 24.04
-- **Plan:** Basic, $6/month (1 CPU, 1GB RAM is fine)
-- **Region:** Whatever's closest to you
+Go to **[archtrack.live/signup](https://archtrack.live/signup)**. Enter your company name, your name, email, and a password. You're in.
 
-### 2. Deploy
-
-Open the **Droplet Console** (in DigitalOcean dashboard, click your droplet > "Console") and paste this one command:
-
-```bash
-curl -sSL https://raw.githubusercontent.com/maximizeGPT/Archtrack/main/deploy.sh | bash
-```
-
-Wait about 2 minutes. When you see `ArchTrack is LIVE!`, you're done.
-
-### 3. Sign Up
-
-Open `https://archtrack.live` in your browser (the IP is shown in your DigitalOcean dashboard).
-
-Click **Create Account**. Enter your company name, your name, email, and a password. You're in.
-
-### 4. Add Employees
+### 2. Add Employees
 
 Go to **Employees** > **+ Add Employee**. Add each team member with their name, email, and department.
 
-### 5. Set Up Desktop Trackers
+### 3. Install the Desktop Tracker
 
-For each employee, click the **Setup Token** button next to their name. This generates a one-time code.
+For each employee, click the **Setup Token** button next to their name. This generates a one-time setup code.
 
-On the employee's computer (Mac or Windows), you need Node.js installed, then:
+On the employee's computer (Mac), install [Node.js](https://nodejs.org) if they don't have it, then run:
 
 ```bash
 git clone https://github.com/maximizeGPT/Archtrack.git
 cd Archtrack/desktop
 npm install
-npm run build
 ```
 
-Create the config file with the setup token:
+Enroll the tracker with the setup token from the dashboard:
 ```bash
-# Mac:
-mkdir -p ~/Library/Application\ Support/@archtrack/desktop
-
-# Write config (replace YOUR_TOKEN and YOUR_SERVER_IP):
-echo '{"deviceToken":"YOUR_DEVICE_TOKEN","serverUrl":"https://archtrack.live"}' > ~/Library/Application\ Support/@archtrack/desktop/config.json
-```
-
-To get the device token, call the enrollment API with the setup token:
-```bash
+# Get the device token (replace SETUP_TOKEN with the code from the dashboard)
 curl -X POST https://archtrack.live/api/auth/enroll \
   -H "Content-Type: application/json" \
-  -d '{"setupToken":"THE_SETUP_TOKEN_FROM_DASHBOARD"}'
+  -d '{"setupToken":"PASTE_SETUP_TOKEN_HERE"}'
 ```
 
-This returns a `deviceToken` — put that in the config file above.
+Save the returned `accessToken` to the config file:
+```bash
+mkdir -p ~/Library/Application\ Support/@archtrack/desktop
+echo '{"deviceToken":"PASTE_ACCESS_TOKEN_HERE","serverUrl":"https://archtrack.live"}' > ~/Library/Application\ Support/@archtrack/desktop/config.json
+```
 
-Then start the tracker:
+Start the tracker:
 ```bash
 npx electron .
 ```
 
-The tracker runs silently and syncs activity every 30 seconds.
+> **Mac users:** Grant **Screen Recording** permission when prompted (System Settings > Privacy & Security > Screen Recording > Electron).
 
-> **Note:** On Mac, you'll need to grant **Screen Recording** permission in System Settings > Privacy & Security > Screen Recording for Electron.
+### 4. Watch It Work
 
-### 6. Watch It Work
-
-Go back to your dashboard. Within a minute, you'll see employee activity appearing — what apps they're using, productivity scores, time breakdowns.
-
-Check it from your phone too — just open the same URL in your mobile browser.
+Go back to your dashboard at [archtrack.live](https://archtrack.live). Within a minute, you'll see employee activity — what apps they're using, productivity scores, time breakdowns. Check it from your phone too.
 
 ---
 
-## Optional: Custom Domain + HTTPS
+## Self-Hosting (Optional)
 
-Instead of `http://165.227.78.107`, you can use `https://track.yourcompany.com`:
+Want to run your own instance instead of using archtrack.live? Deploy to any Ubuntu server:
 
-1. Buy a domain (Namecheap, Cloudflare, Google Domains — ~$10/year)
-2. Add an **A record** pointing to your droplet's IP address
-3. SSH into your droplet and run:
 ```bash
-apt install -y certbot python3-certbot-nginx
-certbot --nginx -d track.yourcompany.com
+curl -sSL https://raw.githubusercontent.com/maximizeGPT/Archtrack/main/deploy.sh | bash
 ```
-4. That's it — HTTPS is live, auto-renews
+
+Works on DigitalOcean ($6/month droplet), AWS, or any VPS. Add a custom domain + HTTPS with:
+```bash
+certbot --nginx -d yourdomain.com
+```
 
 ---
 
