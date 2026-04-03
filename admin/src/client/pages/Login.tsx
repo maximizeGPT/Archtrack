@@ -74,6 +74,12 @@ export const Login: React.FC = () => {
           </button>
 
           <p style={styles.footerText}>
+            <Link to="/forgot-password" style={styles.link}>
+              Forgot password?
+            </Link>
+          </p>
+
+          <p style={styles.footerText}>
             Don't have an account?{' '}
             <Link to="/signup" style={styles.link}>
               Create one

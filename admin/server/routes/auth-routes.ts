@@ -296,4 +296,87 @@ export function setupAuthRoutes(app: Express): void {
       res.status(500).json({ success: false, error: String(error) });
     }
   });
+
+  // Forgot password: generate reset token
+  app.post('/api/auth/forgot-password', async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) {
+        return res.status(400).json({ success: false, error: 'Email is required' });
+      }
+
+      const user = await db().get('SELECT id, name, email FROM users WHERE email = ?', [email]);
+
+      // Always return success (don't reveal if email exists)
+      if (!user) {
+        return res.json({ success: true, message: 'If that email exists, a reset link has been generated.' });
+      }
+
+      // Generate reset token
+      const token = generateSetupToken();
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString(); // 1 hour
+      const now = new Date().toISOString();
+
+      // Store in refresh_tokens table (reuse it for password resets)
+      await db().run(
+        `INSERT INTO refresh_tokens (id, user_id, token_hash, expires_at, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+        [uuidv4(), user.id, 'pwreset:' + token, expiresAt, now]
+      );
+
+      // In production, you'd email this link. For now, log it to PM2 logs.
+      const resetUrl = `/reset-password?token=${token}`;
+      console.log(`\n=== PASSWORD RESET ===`);
+      console.log(`User: ${user.email}`);
+      console.log(`Reset URL: ${resetUrl}`);
+      console.log(`Expires: ${expiresAt}`);
+      console.log(`======================\n`);
+
+      res.json({
+        success: true,
+        message: 'If that email exists, a reset link has been generated.',
+        // Include reset URL in response for MVP (remove this when email is set up)
+        resetUrl
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+
+  // Reset password: validate token and set new password
+  app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+      const { token, password } = req.body;
+      if (!token || !password) {
+        return res.status(400).json({ success: false, error: 'Token and password are required' });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+      }
+
+      const now = new Date().toISOString();
+      const record = await db().get(
+        `SELECT rt.*, u.email FROM refresh_tokens rt
+         JOIN users u ON rt.user_id = u.id
+         WHERE rt.token_hash = ? AND rt.expires_at > ?`,
+        ['pwreset:' + token, now]
+      );
+
+      if (!record) {
+        return res.status(400).json({ success: false, error: 'Invalid or expired reset token' });
+      }
+
+      // Update password
+      const passwordHash = await hashPassword(password);
+      await db().run('UPDATE users SET password_hash = ? WHERE id = ?', [passwordHash, record.user_id]);
+
+      // Delete the reset token
+      await db().run('DELETE FROM refresh_tokens WHERE id = ?', [record.id]);
+
+      res.json({ success: true, message: 'Password has been reset. You can now log in.' });
+    } catch (error) {
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
 }
