@@ -208,6 +208,43 @@ export const Projects: React.FC = () => {
         </div>
       )}
 
+      {projects.length === 0 && (
+        <div style={{
+          textAlign: 'center' as const,
+          padding: '60px 20px',
+          backgroundColor: '#fff',
+          borderRadius: '12px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>💼</div>
+          <h2 style={{ fontSize: '20px', fontWeight: 600, color: '#2c3e50', margin: '0 0 8px' }}>
+            No projects yet
+          </h2>
+          <p style={{ fontSize: '14px', color: '#7f8c8d', margin: '0 0 24px' }}>
+            Projects help you organize work and track time per client.
+          </p>
+          <button
+            onClick={() => {
+              setEditingProject(null);
+              setFormData({ name: '', description: '', clientName: '', budget: '' });
+              setShowForm(true);
+            }}
+            style={{
+              padding: '12px 32px',
+              backgroundColor: '#27ae60',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '15px',
+              fontWeight: 600,
+            }}
+          >
+            + Add First Project
+          </button>
+        </div>
+      )}
+
       <div style={styles.grid}>
         {projects.map(project => (
           <div key={project.id} style={styles.card}>

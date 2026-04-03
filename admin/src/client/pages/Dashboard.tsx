@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useWebSocket } from '../contexts/WebSocketContext';
+import { useAuth } from '../contexts/AuthContext';
 
 import type { Employee } from '../../../shared-types';
 
@@ -54,12 +56,151 @@ interface DashboardStats {
   employeeActivity: EmployeeActivity[];
 }
 
+const GettingStarted: React.FC<{ orgName: string }> = ({ orgName }) => {
+  const navigate = useNavigate();
+
+  const gsStyles: Record<string, React.CSSProperties> = {
+    card: {
+      maxWidth: '640px',
+      margin: '40px auto',
+      borderRadius: '16px',
+      overflow: 'hidden',
+      boxShadow: '0 4px 24px rgba(0,0,0,0.10)',
+      backgroundColor: '#fff',
+    },
+    header: {
+      background: 'linear-gradient(135deg, #2c3e50 0%, #3498db 100%)',
+      padding: '36px 32px 28px',
+      color: '#fff',
+    },
+    headerTitle: {
+      fontSize: '26px',
+      fontWeight: 700,
+      margin: '0 0 6px',
+    },
+    headerSub: {
+      fontSize: '15px',
+      margin: 0,
+      color: 'rgba(255,255,255,0.85)',
+    },
+    body: {
+      padding: '28px 32px 32px',
+    },
+    sectionLabel: {
+      fontSize: '13px',
+      fontWeight: 600,
+      textTransform: 'uppercase' as const,
+      color: '#95a5a6',
+      letterSpacing: '0.5px',
+      marginBottom: '16px',
+    },
+    step: {
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: '14px',
+      padding: '16px',
+      borderRadius: '10px',
+      backgroundColor: '#f8f9fa',
+      marginBottom: '12px',
+    },
+    stepNumber: {
+      width: '28px',
+      height: '28px',
+      borderRadius: '50%',
+      backgroundColor: '#3498db',
+      color: '#fff',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontSize: '14px',
+      fontWeight: 700,
+      flexShrink: 0,
+    },
+    stepContent: {
+      flex: 1,
+    },
+    stepTitle: {
+      fontSize: '15px',
+      fontWeight: 600,
+      color: '#2c3e50',
+      margin: '0 0 4px',
+    },
+    stepDesc: {
+      fontSize: '13px',
+      color: '#7f8c8d',
+      margin: 0,
+      lineHeight: '1.5',
+    },
+    stepLink: {
+      color: '#3498db',
+      fontWeight: 500,
+      cursor: 'pointer',
+      textDecoration: 'none',
+      fontSize: '13px',
+    },
+  };
+
+  return (
+    <div style={gsStyles.card}>
+      <div style={gsStyles.header}>
+        <h1 style={gsStyles.headerTitle}>Welcome to ArchTrack{orgName ? `, ${orgName}` : ''}!</h1>
+        <p style={gsStyles.headerSub}>Follow these steps to get your team up and running.</p>
+      </div>
+      <div style={gsStyles.body}>
+        <div style={gsStyles.sectionLabel}>Getting Started</div>
+
+        <div style={gsStyles.step}>
+          <div style={gsStyles.stepNumber}>1</div>
+          <div style={gsStyles.stepContent}>
+            <p style={gsStyles.stepTitle}>Add your first employee</p>
+            <p style={gsStyles.stepDesc}>
+              Create an employee profile so you can start tracking their activity.{' '}
+              <span style={gsStyles.stepLink} onClick={() => navigate('/employees')}>
+                Go to Employees &rarr;
+              </span>
+            </p>
+          </div>
+        </div>
+
+        <div style={gsStyles.step}>
+          <div style={gsStyles.stepNumber}>2</div>
+          <div style={gsStyles.stepContent}>
+            <p style={gsStyles.stepTitle}>Generate a setup token</p>
+            <p style={gsStyles.stepDesc}>
+              On the Employees page, click the <strong>Setup Token</strong> button next to an employee to generate a unique token for their desktop app.
+            </p>
+          </div>
+        </div>
+
+        <div style={gsStyles.step}>
+          <div style={gsStyles.stepNumber}>3</div>
+          <div style={gsStyles.stepContent}>
+            <p style={gsStyles.stepTitle}>Install the desktop tracker</p>
+            <p style={gsStyles.stepDesc}>
+              Download and install the desktop tracker on each team member's computer.{' '}
+              <a
+                href="https://github.com/maximizeGPT/Archtrack#3-install-the-desktop-tracker"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={gsStyles.stepLink}
+              >
+                View setup instructions &rarr;
+              </a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 export const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { onlineEmployees, recentActivity: _recentActivity } = useWebSocket();
+  const { org } = useAuth();
 
   useEffect(() => {
     loadData();
@@ -100,6 +241,15 @@ export const Dashboard: React.FC = () => {
             Retry
           </button>
         </div>
+      </div>
+    );
+  }
+
+  // Show Getting Started when no employees exist
+  if (employees.length === 0) {
+    return (
+      <div style={styles.container}>
+        <GettingStarted orgName={org?.name || ''} />
       </div>
     );
   }

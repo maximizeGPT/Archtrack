@@ -257,10 +257,7 @@ export const Employees: React.FC = () => {
           onClick={() => setSetupToken(null)}
         >
           <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
-            <h2 style={styles.modalTitle}>Setup Token</h2>
-            <p style={{ color: '#555', fontSize: '14px', marginBottom: '12px' }}>
-              Setup token for <strong>{setupToken.employeeName}</strong>:
-            </p>
+            <h2 style={styles.modalTitle}>Setup Token for {setupToken.employeeName}</h2>
             <div style={{
               backgroundColor: '#f8f9fa',
               border: '1px solid #e0e0e0',
@@ -268,16 +265,13 @@ export const Employees: React.FC = () => {
               padding: '16px',
               fontFamily: 'monospace',
               fontSize: '13px',
-              wordBreak: 'break-all',
+              wordBreak: 'break-all' as const,
               color: '#2c3e50',
-              marginBottom: '16px',
+              marginBottom: '12px',
             }}>
               {setupToken.token}
             </div>
-            <p style={{ color: '#999', fontSize: '12px', marginBottom: '16px' }}>
-              Share this token with the employee so they can set up their account.
-            </p>
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(setupToken.token);
@@ -312,7 +306,72 @@ export const Employees: React.FC = () => {
                 Close
               </button>
             </div>
+            <div style={{
+              backgroundColor: '#f0f7ff',
+              border: '1px solid #d0e3f7',
+              borderRadius: '8px',
+              padding: '14px 16px',
+              marginBottom: '12px',
+            }}>
+              <p style={{ fontSize: '13px', color: '#2c3e50', margin: '0 0 8px', lineHeight: '1.5' }}>
+                Share this token with <strong>{setupToken.employeeName}</strong>. They will need it to connect their desktop app.
+              </p>
+              <p style={{ fontSize: '12px', color: '#7f8c8d', margin: 0, lineHeight: '1.5' }}>
+                The token expires in 7 days and can only be used once.
+              </p>
+            </div>
+            <a
+              href="https://github.com/maximizeGPT/Archtrack#3-install-the-desktop-tracker"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: 'inline-block',
+                fontSize: '13px',
+                color: '#3498db',
+                fontWeight: 500,
+                textDecoration: 'none',
+              }}
+            >
+              View setup instructions on GitHub &rarr;
+            </a>
           </div>
+        </div>
+      )}
+
+      {employees.length === 0 && (
+        <div style={{
+          textAlign: 'center' as const,
+          padding: '60px 20px',
+          backgroundColor: '#fff',
+          borderRadius: '12px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>👥</div>
+          <h2 style={{ fontSize: '20px', fontWeight: 600, color: '#2c3e50', margin: '0 0 8px' }}>
+            No employees yet
+          </h2>
+          <p style={{ fontSize: '14px', color: '#7f8c8d', margin: '0 0 24px' }}>
+            Add your first team member to start tracking.
+          </p>
+          <button
+            onClick={() => {
+              setEditingEmployee(null);
+              setFormData({ name: '', email: '', role: 'employee', department: '', hourlyRate: '' });
+              setShowForm(true);
+            }}
+            style={{
+              padding: '12px 32px',
+              backgroundColor: '#27ae60',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '15px',
+              fontWeight: 600,
+            }}
+          >
+            + Add Employee
+          </button>
         </div>
       )}
 

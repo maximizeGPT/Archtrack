@@ -84,19 +84,25 @@ export const Reports: React.FC = () => {
           ))}
         </select>
 
-        <input
-          type="date"
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-          style={styles.input}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <label style={{ fontSize: '13px', fontWeight: 500, color: '#555' }}>From:</label>
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            style={styles.input}
+          />
+        </div>
 
-        <input
-          type="date"
-          value={endDate}
-          onChange={(e) => setEndDate(e.target.value)}
-          style={styles.input}
-        />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <label style={{ fontSize: '13px', fontWeight: 500, color: '#555' }}>To:</label>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            style={styles.input}
+          />
+        </div>
 
         <button
           onClick={generateReport}
@@ -106,6 +112,21 @@ export const Reports: React.FC = () => {
           {loading ? 'Generating...' : 'Generate Report'}
         </button>
       </div>
+
+      {!report && !loading && (
+        <div style={{
+          textAlign: 'center' as const,
+          padding: '48px 20px',
+          backgroundColor: '#fff',
+          borderRadius: '12px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        }}>
+          <div style={{ fontSize: '40px', marginBottom: '16px' }}>📈</div>
+          <p style={{ fontSize: '15px', color: '#7f8c8d', margin: 0, maxWidth: '420px', marginLeft: 'auto', marginRight: 'auto', lineHeight: '1.6' }}>
+            Select an employee and date range, then click <strong>Generate Report</strong> to see productivity data.
+          </p>
+        </div>
+      )}
 
       {report && (
         <div style={styles.reportContainer}>

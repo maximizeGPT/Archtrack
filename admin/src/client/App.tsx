@@ -71,7 +71,7 @@ const AppContent: React.FC = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, org, user } = useAuth();
 
   // Get current page from URL
   const getCurrentPage = (): Page => {
@@ -143,6 +143,11 @@ const AppContent: React.FC = () => {
           <div className="logo">
             <h1>ArchTrack</h1>
             <span>Admin</span>
+            {org?.name && (
+              <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', fontWeight: 400 }}>
+                {org.name}
+              </div>
+            )}
           </div>
         )}
 
@@ -180,6 +185,39 @@ const AppContent: React.FC = () => {
         </nav>
 
         <div style={{ marginTop: 'auto', padding: '16px' }}>
+          <a
+            href="https://github.com/maximizeGPT/Archtrack"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              display: 'block',
+              width: '100%',
+              padding: '10px',
+              backgroundColor: 'rgba(52,152,219,0.08)',
+              color: '#3498db',
+              border: '1px solid rgba(52,152,219,0.2)',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              fontSize: '13px',
+              fontWeight: 500,
+              textAlign: 'center' as const,
+              textDecoration: 'none',
+              marginBottom: '8px',
+              boxSizing: 'border-box' as const,
+            }}
+          >
+            Help
+          </a>
+          {user?.name && (
+            <div style={{
+              fontSize: '12px',
+              color: '#94a3b8',
+              textAlign: 'center' as const,
+              marginBottom: '8px',
+            }}>
+              {user.name}
+            </div>
+          )}
           <button
             onClick={logout}
             style={{

@@ -87,6 +87,7 @@ export const Signup: React.FC = () => {
               minLength={6}
               style={styles.input}
             />
+            <span style={{ fontSize: '12px', color: '#999', marginTop: '2px' }}>Minimum 6 characters</span>
           </div>
 
           <button

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import type { Task, Project, Employee } from '../../../shared-types';
 
 export const Tasks: React.FC = () => {
+  const navigate = useNavigate();
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -293,6 +295,68 @@ export const Tasks: React.FC = () => {
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {tasks.length === 0 && (
+        <div style={{
+          textAlign: 'center' as const,
+          padding: '60px 20px',
+          backgroundColor: '#fff',
+          borderRadius: '12px',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>&#10003;</div>
+          <h2 style={{ fontSize: '20px', fontWeight: 600, color: '#2c3e50', margin: '0 0 8px' }}>
+            No tasks yet
+          </h2>
+          {projects.length === 0 ? (
+            <>
+              <p style={{ fontSize: '14px', color: '#7f8c8d', margin: '0 0 24px' }}>
+                Create a project first before adding tasks.
+              </p>
+              <button
+                onClick={() => navigate('/projects')}
+                style={{
+                  padding: '12px 32px',
+                  backgroundColor: '#3498db',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: 600,
+                }}
+              >
+                Go to Projects
+              </button>
+            </>
+          ) : (
+            <>
+              <p style={{ fontSize: '14px', color: '#7f8c8d', margin: '0 0 24px' }}>
+                Break down projects into tasks and assign them to your team.
+              </p>
+              <button
+                onClick={() => {
+                  setEditingTask(null);
+                  setFormData({ name: '', description: '', projectId: '', assignedTo: '', priority: 'medium', estimatedHours: '', status: 'todo' });
+                  setShowForm(true);
+                }}
+                style={{
+                  padding: '12px 32px',
+                  backgroundColor: '#27ae60',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '15px',
+                  fontWeight: 600,
+                }}
+              >
+                + Create First Task
+              </button>
+            </>
+          )}
         </div>
       )}
 
