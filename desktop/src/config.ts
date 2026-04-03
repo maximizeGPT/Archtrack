@@ -7,7 +7,7 @@ export const ARCHTRACK_CONFIG = {
   // - Render: 'https://archtrack-admin.onrender.com'
   // - DigitalOcean: 'http://165.227.78.107:3001'
   // - Local: 'http://localhost:3001'
-  serverUrl: 'http://10.0.0.96:3001',
+  serverUrl: 'http://165.227.78.107',
 
   // Device auth token (from setup token enrollment)
   deviceToken: process.env.ARCHTRACK_DEVICE_TOKEN || '',

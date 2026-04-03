@@ -1,191 +1,216 @@
-# ArchTrack — Simple Employee Time Tracking
+# ArchTrack — Employee Time Tracking for Small Businesses
 
 **Know where your team's time goes. Without the enterprise price tag.**
 
-ArchTrack is a simple, private employee tracking system for small businesses. See who's working, what they're working on, and where time gets wasted — all in real-time.
+ArchTrack is a self-hosted employee tracking system. See who's working, what they're working on, and where time gets wasted — all in real-time from any device.
 
 ---
 
 ## What You Get
 
-### 📊 Real-Time Dashboard
-See your entire team at a glance:
-- Who's online and working right now
-- What app or website they're using
-- How productive they are (0-100% score)
-- Total hours worked today
-- Suspicious activity alerts (YouTube, social media, etc.)
-
-### 🤖 AI Assistant (Genesis)
-Just ask questions in plain English:
-- *"Who was most productive today?"*
-- *"How much time did Ahmed spend on emails?"*
-- *"Who's burning out?"*
-- *"What can Sarah do better?"*
-
-No reports to run. No spreadsheets. Just ask.
-
-### 🖥️ Automatic Tracking
-Your employees install a small desktop app. It runs silently and tracks:
-- Time spent in each app/website
-- Project assignments
-- Idle time (breaks, away from desk)
-- Productive vs unproductive time
-
-**No manual entry. No timesheets.**
+- **Real-time dashboard** — see who's online, what app they're using, productivity scores
+- **AI assistant** — ask "Who was most productive today?" in plain English
+- **Automatic tracking** — silent desktop app, no timesheets, no manual entry
+- **Smart role detection** — auto-detects if someone is a developer, designer, manager, etc. and adjusts scoring
+- **Multi-tenant** — multiple businesses on one server, completely isolated data
+- **Mobile friendly** — check your dashboard from your phone
 
 ---
 
-## Perfect For
+## Quick Start (5 minutes)
 
-- **Architecture firms** — Track billable hours per project
-- **Manufacturing** — Office vs floor time visibility
-- **Design studios** — Client work vs admin time
-- **Any small business** with 5-50 employees
+### 1. Get a Server
 
----
+Create a [DigitalOcean](https://www.digitalocean.com) account and spin up a Droplet:
+- **Image:** Ubuntu 24.04
+- **Plan:** Basic, $6/month (1 CPU, 1GB RAM is fine)
+- **Region:** Whatever's closest to you
 
-## Quick Start
+### 2. Deploy
 
-### Step 1: Deploy to the Cloud (Recommended)
+Open the **Droplet Console** (in DigitalOcean dashboard, click your droplet > "Console") and paste this one command:
 
-**Option A: DigitalOcean (Easiest)**
-1. Create a DigitalOcean account
-2. Create a Droplet (Ubuntu, $5/month plan)
-3. SSH into your droplet and run:
 ```bash
-curl -sSL https://raw.githubusercontent.com/maximizeGPT/Archtrack/main/deploy-enterprise.sh | bash
+curl -sSL https://raw.githubusercontent.com/maximizeGPT/Archtrack/main/deploy.sh | bash
 ```
-4. Your dashboard is now live at `http://YOUR_DROPLET_IP:3001`
 
-**Option B: Your Own Server**
-If you have a server or VPS, just run the deploy script above.
+Wait about 2 minutes. When you see `ArchTrack is LIVE!`, you're done.
 
-### Step 2: Add Your Employees
-1. Open your dashboard URL in a browser
-2. Click "Employees" in the sidebar
-3. Add each team member (name, department, hourly rate)
-4. Each employee gets a unique ID
+### 3. Sign Up
 
-### Step 3: Install Desktop Trackers
+Open `http://YOUR_DROPLET_IP` in your browser (the IP is shown in your DigitalOcean dashboard).
 
-**Currently, the desktop tracker requires manual setup.** Here's how:
+Click **Create Account**. Enter your company name, your name, email, and a password. You're in.
 
-On each employee's Mac or Windows computer:
+### 4. Add Employees
 
-1. **Download the code:**
+Go to **Employees** > **+ Add Employee**. Add each team member with their name, email, and department.
+
+### 5. Set Up Desktop Trackers
+
+For each employee, click the **Setup Token** button next to their name. This generates a one-time code.
+
+On the employee's computer (Mac or Windows), you need Node.js installed, then:
+
 ```bash
 git clone https://github.com/maximizeGPT/Archtrack.git
 cd Archtrack/desktop
-```
-
-2. **Install and build:**
-```bash
 npm install
 npm run build
 ```
 
-3. **Run the tracker:**
+Create the config file with the setup token:
 ```bash
-npm start
+# Mac:
+mkdir -p ~/Library/Application\ Support/@archtrack/desktop
+
+# Write config (replace YOUR_TOKEN and YOUR_SERVER_IP):
+echo '{"deviceToken":"YOUR_DEVICE_TOKEN","serverUrl":"http://YOUR_SERVER_IP"}' > ~/Library/Application\ Support/@archtrack/desktop/config.json
 ```
 
-4. **Enter their unique ID** (from Step 2) when prompted
+To get the device token, call the enrollment API with the setup token:
+```bash
+curl -X POST http://YOUR_SERVER_IP/api/auth/enroll \
+  -H "Content-Type: application/json" \
+  -d '{"setupToken":"THE_SETUP_TOKEN_FROM_DASHBOARD"}'
+```
 
-The tracker will start automatically on login and run silently in the background.
+This returns a `deviceToken` — put that in the config file above.
 
-**Need help?** The desktop tracker setup requires some technical knowledge. Consider hiring a developer for 1-2 hours to set this up for all employees.
+Then start the tracker:
+```bash
+npx electron .
+```
+
+The tracker runs silently and syncs activity every 30 seconds.
+
+> **Note:** On Mac, you'll need to grant **Screen Recording** permission in System Settings > Privacy & Security > Screen Recording for Electron.
+
+### 6. Watch It Work
+
+Go back to your dashboard. Within a minute, you'll see employee activity appearing — what apps they're using, productivity scores, time breakdowns.
+
+Check it from your phone too — just open the same URL in your mobile browser.
 
 ---
 
-## What Makes ArchTrack Different
+## Optional: Custom Domain + HTTPS
 
-| Feature | ArchTrack | Other Tools |
-|---------|-----------|-------------|
-| **Price** | Free (open source) | $10-50/employee/month |
-| **Setup** | 5 minutes | Hours of configuration |
-| **Privacy** | Your data stays on your computer | Sent to cloud servers |
-| **AI Insights** | Built-in (ask anything) | Expensive add-on |
-| **Complexity** | Simple, focused | Bloated with features |
+Instead of `http://165.227.78.107`, you can use `https://track.yourcompany.com`:
+
+1. Buy a domain (Namecheap, Cloudflare, Google Domains — ~$10/year)
+2. Add an **A record** pointing to your droplet's IP address
+3. SSH into your droplet and run:
+```bash
+apt install -y certbot python3-certbot-nginx
+certbot --nginx -d track.yourcompany.com
+```
+4. That's it — HTTPS is live, auto-renews
 
 ---
 
-## Common Questions
+## Features
 
-**Q: Is this spying on my employees?**
-A: No. It's transparency, not surveillance. Employees see the same dashboard you do. No keystroke logging, no screenshots, no camera access. Just time spent in apps.
+### Dashboard
+- Team productivity score (0-100%)
+- Focus time vs idle/wasted time
+- Per-employee activity breakdown
+- Suspicious activity alerts (YouTube while Slack shows "active", etc.)
+- Time breakdown by category (Core Work, Communication, Research, etc.)
 
-**Q: Will it slow down their computers?**
-A: No. The tracker uses less than 1% CPU. Most employees won't notice it's running.
+### AI Assistant (Genesis)
+Ask questions in plain English:
+- "Who was most productive today?"
+- "How much time did Ahmed spend on emails?"
+- "Who's at risk of burnout?"
+- "Show me non-work activity this week"
 
-**Q: What if someone works from home?**
-A: The tracker works anywhere. Data syncs when they're back in the office, or you can set up cloud sync for remote teams.
+### Smart Role Detection
+The system watches what apps an employee uses and auto-detects their job type:
+- **Developer** — VSCode, Terminal, Claude get scored as "Core Work"
+- **Designer** — Figma, Photoshop, Sketch
+- **Architect** — AutoCAD, Revit, SketchUp
+- **Manager** — Jira, Zoom, Slack
+- **Sales** — Salesforce, LinkedIn, CRM tools
+- **Data Analyst** — Jupyter, Tableau, Excel
 
-**Q: Can employees see their own data?**
-A: Yes. Full transparency. They can see their productivity, time breakdown, and compare to team averages.
+Admins can override if the auto-detection is wrong.
 
-**Q: What about privacy?**
-A: All data stays local by default. No third-party servers. You own everything.
+### Multi-Tenant
+- Each business is completely isolated
+- One server handles unlimited companies
+- JWT auth for dashboard and desktop tracker
+- Setup tokens for easy employee onboarding
 
-**Q: I have multiple offices. Will this work?**
-A: Yes. You have two options:
-1. **One central server** (recommended) — Set up one DigitalOcean droplet ($5/month). All employees at all locations connect to it over the internet. Simple, cheap, data centralized.
-2. **Separate server per location** — Each office gets its own server. More complex, but data stays local to each office.
+---
 
-For most small businesses, one central server works perfectly.
+## Architecture
+
+```
+[Employee Mac/PC]          [Your Server]              [Your Phone/Laptop]
+  Desktop Tracker  --->  Node.js + SQLite  <---   Dashboard (any browser)
+  (Electron app)         (port 3001)               (React SPA)
+                         nginx (port 80)
+```
+
+- **Admin dashboard:** React SPA served by Express
+- **API:** Express + SQLite (upgradeable to Postgres)
+- **Desktop tracker:** Electron app, syncs every 30 seconds
+- **Auth:** JWT tokens (24h dashboard, 90d device)
+- **Process manager:** PM2 (auto-restart on crash)
+- **Reverse proxy:** nginx (port 80 -> 3001, WebSocket support)
+
+---
+
+## Updating
+
+SSH into your server (or use DigitalOcean Console) and run:
+
+```bash
+cd /opt/archtrack && git pull && cd admin && npm install --no-package-lock && npx tsc -p tsconfig.server.json && npx vite build && pm2 restart archtrack
+```
+
+---
+
+## API Reference
+
+All endpoints require `Authorization: Bearer <token>` header (except auth endpoints).
+
+### Auth
+| Endpoint | Method | Auth | Description |
+|----------|--------|------|-------------|
+| `/api/auth/signup` | POST | Public | Create account + org |
+| `/api/auth/login` | POST | Public | Login, get JWT |
+| `/api/auth/forgot-password` | POST | Public | Generate reset link |
+| `/api/auth/reset-password` | POST | Public | Reset password with token |
+| `/api/auth/setup-token` | POST | Dashboard | Generate employee setup token |
+| `/api/auth/enroll` | POST | Public | Redeem setup token for device JWT |
+| `/api/auth/me` | GET | Any | Get current user info |
+
+### Employees & Activities
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/employees` | GET/POST | List or create employees |
+| `/api/activities` | GET | Get tracked activities |
+| `/api/activity` | POST | Desktop tracker syncs here |
+| `/api/dashboard/stats` | GET | Dashboard overview data |
+| `/api/roles` | GET | Smart role detection status |
+| `/api/roles/:id` | PUT | Override detected role |
 
 ---
 
 ## System Requirements
 
-**For the dashboard (your computer):**
-- Mac, Windows, or Linux
-- Node.js 18+ (free download)
-- 2GB RAM
+**Server:** Ubuntu 20.04+, 1GB RAM, 1 CPU ($6/month on DigitalOcean)
 
-**For employee trackers:**
-- Mac or Windows
-- 100MB disk space
-- Internet connection (for syncing)
+**Desktop tracker:** Mac or Windows, Node.js 18+, Screen Recording permission (Mac)
 
----
-
-## Screenshots
-
-*Dashboard showing real-time team activity*
-
-*AI assistant answering "Who was most productive today?"*
-
-*Employee detail view with time breakdown*
-
----
-
-## Need Help?
-
-**Installation issues?** Open an issue on GitHub.
-
-**Feature requests?** Start a discussion.
-
-**Custom setup?** Hire a developer (this is open source).
-
----
-
-## Built For Real Small Businesses
-
-ArchTrack was built for my uncle's architecture firm. He needed visibility into his team's time without paying $500/month for enterprise software.
-
-Now he can:
-- See who's actually working on billable projects
-- Identify time-wasters (YouTube, social media)
-- Catch burnout before it happens
-- Have data-driven conversations with employees
-
-**No micromanagement. Just visibility.**
+**Dashboard:** Any modern browser (phone or computer)
 
 ---
 
 ## License
 
-Free to use, modify, and sell. MIT License.
+MIT License — free to use, modify, and sell.
 
-Built with ❤️ for small business owners who deserve big tools.
+Built for small business owners who deserve big tools.
