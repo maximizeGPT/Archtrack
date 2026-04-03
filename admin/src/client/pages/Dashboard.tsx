@@ -194,23 +194,19 @@ const GettingStarted: React.FC<{ orgName: string; onDismiss: () => void }> = ({ 
           </div>
         </div>
 
-        <button
-          onClick={onDismiss}
-          style={{
-            display: 'block',
-            width: '100%',
-            padding: '14px',
-            backgroundColor: 'transparent',
-            color: '#95a5a6',
-            border: '1px solid #e0e0e0',
-            borderRadius: '10px',
-            fontSize: '14px',
-            cursor: 'pointer',
-            marginTop: '4px',
-          }}
-        >
-          Skip — go to dashboard
-        </button>
+        <div style={{ textAlign: 'center', marginTop: '8px' }}>
+          <span
+            onClick={onDismiss}
+            style={{
+              color: '#b0b8c1',
+              fontSize: '13px',
+              cursor: 'pointer',
+              textDecoration: 'none',
+            }}
+          >
+            I'll do this later
+          </span>
+        </div>
       </div>
     </div>
   );
