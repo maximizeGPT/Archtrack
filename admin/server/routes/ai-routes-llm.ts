@@ -64,31 +64,44 @@ async function callLLM(messages: Array<{role: string, content: string}>, tempera
 /**
  * Generate system prompt with current data context
  */
-async function generateSystemPrompt(db: any): Promise<string> {
+async function generateSystemPrompt(db: any, orgId?: string): Promise<string> {
+  const orgFilter = orgId ? `AND org_id = '${orgId}'` : '';
+  const orgFilterWhere = orgId ? `WHERE org_id = '${orgId}'` : '';
+  const orgFilterAnd = orgId ? `AND a.org_id = '${orgId}'` : '';
+
+  // Helper: format duration smartly
+  const fmt = (totalSeconds: number) => {
+    if (!totalSeconds || totalSeconds <= 0) return '0m';
+    const mins = Math.round(totalSeconds / 60);
+    if (mins < 60) return `${mins}m`;
+    const hrs = Math.round(totalSeconds / 360) / 10;
+    return `${hrs}h`;
+  };
+
   // Get current team stats
   const stats = await db.get(`
-    SELECT 
+    SELECT
       COUNT(DISTINCT employee_id) as employee_count,
       COUNT(*) as total_activities,
       AVG(productivity_score) as avg_productivity,
-      SUM(duration_seconds) / 3600 as total_hours
-    FROM activities 
-    WHERE timestamp > datetime('now', '-7 days')
+      SUM(duration_seconds) as total_seconds
+    FROM activities
+    WHERE timestamp > datetime('now', '-7 days') ${orgFilter}
   `);
 
   // Get employee list
-  const employees = await db.all('SELECT name, department, hourly_rate FROM employees WHERE is_active = 1');
-  
-  // Get recent activity summary
+  const employees = await db.all(`SELECT name, department, hourly_rate FROM employees WHERE is_active = 1 ${orgFilter}`);
+
+  // Get recent activity summary with minutes
   const recentActivity = await db.all(`
-    SELECT 
+    SELECT
       e.name,
       COUNT(*) as activities,
       AVG(a.productivity_score) as avg_score,
-      SUM(a.duration_seconds) / 3600 as hours
+      SUM(a.duration_seconds) as total_seconds
     FROM activities a
     JOIN employees e ON a.employee_id = e.id
-    WHERE a.timestamp > datetime('now', '-1 day')
+    WHERE a.timestamp > datetime('now', '-1 day') ${orgFilterAnd}
     GROUP BY e.id
     ORDER BY activities DESC
     LIMIT 5
@@ -96,110 +109,90 @@ async function generateSystemPrompt(db: any): Promise<string> {
 
   // Get top apps by time spent
   const topApps = await db.all(`
-    SELECT 
+    SELECT
       app_name,
-      SUM(duration_seconds) / 3600 as hours,
+      category_name,
+      SUM(duration_seconds) as total_seconds,
       AVG(productivity_score) as avg_score,
       COUNT(*) as usage_count
     FROM activities
-    WHERE timestamp > datetime('now', '-7 days')
+    WHERE timestamp > datetime('now', '-7 days') ${orgFilter}
       AND app_name NOT IN ('loginwindow', 'Window Server', 'kernel', 'system', 'Finder', 'Dock')
     GROUP BY app_name
-    ORDER BY hours DESC
+    ORDER BY total_seconds DESC
     LIMIT 10
   `);
 
   // Get productivity breakdown by category
   const categoryBreakdown = await db.all(`
-    SELECT 
-      category,
-      SUM(duration_seconds) / 3600 as hours,
+    SELECT
+      category_name,
+      SUM(duration_seconds) as total_seconds,
       COUNT(*) as activities
     FROM activities
-    WHERE timestamp > datetime('now', '-7 days')
+    WHERE timestamp > datetime('now', '-7 days') ${orgFilter}
     GROUP BY category
-    ORDER BY hours DESC
+    ORDER BY total_seconds DESC
   `);
 
-  // Get employee app usage patterns for repetitive task detection
+  // Get employee app usage patterns
   const employeePatterns = await db.all(`
-    SELECT 
+    SELECT
       e.name,
       a.app_name,
+      a.category_name,
       COUNT(*) as times_used,
-      SUM(a.duration_seconds) / 3600 as total_hours,
+      SUM(a.duration_seconds) as total_seconds,
       AVG(a.productivity_score) as avg_productivity
     FROM activities a
     JOIN employees e ON a.employee_id = e.id
-    WHERE a.timestamp > datetime('now', '-7 days')
+    WHERE a.timestamp > datetime('now', '-7 days') ${orgFilterAnd}
       AND a.app_name NOT IN ('loginwindow', 'Window Server', 'kernel', 'system', 'Finder', 'Dock')
     GROUP BY e.id, a.app_name
-    HAVING times_used > 10
+    HAVING times_used > 5
     ORDER BY times_used DESC
     LIMIT 15
   `);
 
-  return `You are Genesis, an AI analytics assistant for ArchTrack - an employee productivity tracking system for an architecture firm.
+  return `You are Genesis, an AI analytics assistant for ArchTrack — an employee productivity tracking system.
 
-CURRENT TEAM CONTEXT:
-- Active Employees: ${stats.employee_count}
-- Total Hours (7 days): ${Math.round(stats.total_hours * 10) / 10}h
-- Average Productivity: ${Math.round(stats.avg_productivity)}%
-- Total Activities: ${stats.total_activities}
+IMPORTANT RULES:
+- Only reference data shown below. Do NOT make up numbers.
+- Times are shown in minutes (m) or hours (h). Use the exact values given.
+- If a value seems low (e.g. "25m tracked"), that's real data — don't assume it's a bug.
+- Each "activity" is a 10-second snapshot of what app the employee was using.
+- Give advice based on ACTUAL data patterns, not generic productivity tips.
+- Do NOT recommend random tools unless they're directly relevant to the apps being used.
+
+CURRENT TEAM (last 7 days):
+- Employees tracked: ${stats.employee_count || 0}
+- Total tracked time: ${fmt(stats.total_seconds || 0)}
+- Average productivity: ${Math.round(stats.avg_productivity || 0)}%
+- Activity snapshots: ${stats.total_activities || 0}
 
 TEAM MEMBERS:
-${employees.map((e: any) => `- ${e.name} (${e.department}, $${e.hourly_rate}/hr)`).join('\n')}
+${employees.map((e: any) => `- ${e.name} (${e.department || 'No dept'})`).join('\n') || '- No employees yet'}
 
-RECENT ACTIVITY (Last 24h):
-${recentActivity.map((a: any) => `- ${a.name}: ${a.activities} activities, ${Math.round(a.avg_score)}% productivity, ${Math.round(a.hours * 10) / 10}h`).join('\n')}
+TODAY'S ACTIVITY:
+${recentActivity.map((a: any) => `- ${a.name}: ${a.activities} snapshots, ${Math.round(a.avg_score)}% productivity, ${fmt(a.total_seconds)} tracked`).join('\n') || '- No activity today'}
 
-TOP APPS BY TIME (Last 7 days):
-${topApps.map((a: any) => `- ${a.app_name}: ${Math.round(a.hours * 10) / 10}h, ${Math.round(a.avg_score)}% productivity, used ${a.usage_count} times`).join('\n')}
+TOP APPS (last 7 days):
+${topApps.map((a: any) => `- ${a.app_name} [${a.category_name}]: ${fmt(a.total_seconds)}, ${Math.round(a.avg_score)}% score, ${a.usage_count} snapshots`).join('\n') || '- No app data'}
 
-TIME BREAKDOWN BY CATEGORY (Last 7 days):
-${categoryBreakdown.map((c: any) => `- ${c.category}: ${Math.round(c.hours * 10) / 10}h (${c.activities} activities)`).join('\n')}
+TIME BY CATEGORY (last 7 days):
+${categoryBreakdown.map((c: any) => `- ${c.category_name}: ${fmt(c.total_seconds)} (${c.activities} snapshots)`).join('\n') || '- No category data'}
 
-FREQUENT APP USAGE PATTERNS (Potential repetitive tasks):
-${employeePatterns.map((p: any) => `- ${p.name} → ${p.app_name}: ${p.times_used} times, ${Math.round(p.total_hours * 10) / 10}h total`).join('\n')}
+APP USAGE PATTERNS:
+${employeePatterns.map((p: any) => `- ${p.name} uses ${p.app_name} [${p.category_name}]: ${p.times_used}x, ${fmt(p.total_seconds)}`).join('\n') || '- Not enough data yet'}
 
-AUTOMATION RECOMMENDATIONS BY APP TYPE:
-- **Google Chrome / Browser**: Use browser extensions (Toby, Workona) for tab management. Consider bookmark scripts or auto-fill tools for repetitive form entry.
-- **Terminal / Command Line**: Create shell aliases, bash scripts, or use tools like Warp/ Fig for command autocomplete. Document common commands in a runbook.
-- **Slack / Teams**: Set up keyboard shortcuts, use /remind for follow-ups, create saved snippets for common responses.
-- **Email (Gmail/Outlook)**: Use templates/canned responses, schedule send, filters for auto-sorting, and unsubscribe tools.
-- **VS Code / IDE**: Code snippets, extensions for repetitive tasks, multi-cursor editing, and automated formatting.
-- **Excel / Sheets**: Macros, formulas instead of manual calculations, templates for recurring reports.
-- **Design tools (Figma/Sketch)**: Component libraries, auto-layout, plugins for repetitive exports.
-- **Project management (Jira/Asana)**: Templates for recurring tasks, automation rules, bulk edit features.
+RESPONSE STYLE:
+- Be concise and data-driven. Reference specific numbers from the data above.
+- When asked "who was most productive", compare actual employees and scores.
+- Suggest 2-3 follow-up questions the business owner might want to ask.
+- Keep responses to 3-5 paragraphs max.
+- Use markdown formatting (bold, lists) for readability.
 
-YOUR CAPABILITIES:
-1. Answer questions about employee productivity, time tracking, and app usage
-2. Identify patterns and trends in work habits
-3. Suggest improvements for individual employees or the team
-4. Generate insights about focus time, distractions, and efficiency
-5. Compare performance across employees or time periods
-
-RESPONSE GUIDELINES:
-- Be concise but informative (2-4 sentences for simple queries)
-- Use specific data points when available
-- **ALWAYS give 3 specific, actionable steps they can do TODAY**
-- Don't say "consider automating" — say "Install Toby extension at toby.tab"
-- Don't say "reduce distractions" — say "Use Cold Turkey blocker, download at getcoldturkey.com"
-- Include exact tool names, URLs, and command-line examples where possible
-- If data is insufficient, explain what's needed
-- Use emojis sparingly for visual hierarchy
-- Always offer 3 relevant follow-up questions as suggestions
-
-SPECIFIC WORKFLOW FIXES:
-When you detect patterns like "OpenClaw Control ↔ Terminal/DigitalOcean":
-1. **SSH Key Setup**: "Set up SSH keys to avoid typing passwords repeatedly"
-2. **SSH Config**: "Add host aliases in ~/.ssh/config for one-command access"
-3. **Terminal Multiplexer**: "Use tmux or screen to keep sessions alive between switches"
-4. **Local Scripts**: "Create shell scripts for common deployment commands"
-5. **VS Code Remote**: "Use VS Code Remote-SSH extension to edit files directly on the server"
-6. **GitHub Actions**: "Automate deployments with GitHub Actions instead of manual SSH"
-
-TONE: Professional, helpful, data-driven, slightly friendly but not overly casual.`;
+TONE: Professional, helpful, like a smart analyst presenting findings to a business owner.`;
 }
 
 /**
@@ -219,8 +212,9 @@ router.post('/chat', async (req, res) => {
     // Get or create conversation history
     let history = conversations.get(convId) || [];
     
-    // Generate system prompt with current data
-    const systemPrompt = await generateSystemPrompt(db);
+    // Generate system prompt with current data (scoped to org)
+    const orgId = (req as any).orgId;
+    const systemPrompt = await generateSystemPrompt(db, orgId);
     
     // Build messages array
     const messages = [
@@ -231,9 +225,6 @@ router.post('/chat', async (req, res) => {
 
     // Call LLM
     let answer = await callLLM(messages);
-    
-    // Post-process to add specific actionable steps
-    answer = enhanceResponseWithActions(answer, question);
     
     // Update conversation history
     history.push({ role: 'user', content: question });
