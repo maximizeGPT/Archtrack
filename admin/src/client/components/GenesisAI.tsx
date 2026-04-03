@@ -3,13 +3,52 @@ import './GenesisAI.css';
 
 // Simple markdown formatter
 function formatMarkdown(text: string): string {
+  const lines = text.split('\n');
+  const htmlLines: string[] = [];
+  let inList = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Headings: ### heading → <h4>
+    if (trimmed.startsWith('### ')) {
+      if (inList) { htmlLines.push('</ul>'); inList = false; }
+      htmlLines.push(`<h4 style="font-size:15px;font-weight:600;margin:12px 0 6px;">${formatInline(trimmed.slice(4))}</h4>`);
+      continue;
+    }
+
+    // List items: - item or * item
+    if (/^[-*]\s+/.test(trimmed)) {
+      if (!inList) { htmlLines.push('<ul style="margin:4px 0;padding-left:20px;">'); inList = true; }
+      htmlLines.push(`<li style="margin:2px 0;">${formatInline(trimmed.replace(/^[-*]\s+/, ''))}</li>`);
+      continue;
+    }
+
+    // Close list if we hit a non-list line
+    if (inList) { htmlLines.push('</ul>'); inList = false; }
+
+    // Empty line → break
+    if (trimmed === '') {
+      htmlLines.push('<br/>');
+      continue;
+    }
+
+    // Normal text
+    htmlLines.push(formatInline(trimmed) + '<br/>');
+  }
+
+  if (inList) { htmlLines.push('</ul>'); }
+  return htmlLines.join('');
+}
+
+function formatInline(text: string): string {
   return text
-    // Bold: **text** → <strong>text</strong>
+    // Links: [text](url) → <a>
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:#3498db;text-decoration:underline;">$1</a>')
+    // Bold: **text** → <strong>
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    // Italic: *text* → <em>text</em>  
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    // Line breaks
-    .replace(/\n/g, '<br/>');
+    // Italic: *text* → <em>
+    .replace(/\*(.*?)\*/g, '<em>$1</em>');
 }
 
 interface Message {

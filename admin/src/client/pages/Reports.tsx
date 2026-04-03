@@ -2,6 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import type { Employee, Activity } from '../../../shared-types';
 
+function formatDuration(hours: number): string {
+  if (hours >= 1) return `${hours.toFixed(1)}h`;
+  if (hours > 0) return `${Math.round(hours * 60)}m`;
+  return '0h';
+}
+
 const SUSPICIOUS_ACTIVITIES_PER_PAGE = 10;
 
 export const Reports: React.FC = () => {
@@ -133,18 +139,18 @@ export const Reports: React.FC = () => {
           <div style={styles.summaryCards}>
             <div style={styles.card}>
               <h3 style={styles.cardTitle}>Total Hours</h3>
-              <p style={styles.cardValue}>{report.summary.totalHours}</p>
+              <p style={styles.cardValue}>{formatDuration(report.summary.totalHours)}</p>
             </div>
             <div style={styles.card}>
               <h3 style={styles.cardTitle}>Productive Hours</h3>
               <p style={{...styles.cardValue, color: '#27ae60'}}>
-                {report.summary.productiveHours}
+                {formatDuration(report.summary.productiveHours)}
               </p>
             </div>
             <div style={styles.card}>
               <h3 style={styles.cardTitle}>Unproductive Hours</h3>
               <p style={{...styles.cardValue, color: '#e74c3c'}}>
-                {report.summary.unproductiveHours}
+                {formatDuration(report.summary.unproductiveHours)}
               </p>
             </div>
             <div style={styles.card}>
@@ -203,7 +209,7 @@ export const Reports: React.FC = () => {
                 <div key={category} style={styles.categoryItem}>
                   <span style={styles.categoryName}>{category}</span>
                   <span style={styles.categoryValue}>
-                    {Math.round((minutes as number) / 60 * 10) / 10} hrs
+                    {formatDuration(Math.round((minutes as number) / 60 * 10) / 10)}
                   </span>
                 </div>
               ))}

@@ -6,6 +6,12 @@ import { useAuth } from '../contexts/AuthContext';
 
 import type { Employee } from '../../../shared-types';
 
+function formatDuration(hours: number): string {
+  if (hours >= 1) return `${hours.toFixed(1)}h`;
+  if (hours > 0) return `${Math.round(hours * 60)}m`;
+  return '0h';
+}
+
 interface Activity {
   id: string;
   employeeId: string;
@@ -56,7 +62,7 @@ interface DashboardStats {
   employeeActivity: EmployeeActivity[];
 }
 
-const GettingStarted: React.FC<{ orgName: string; onDismiss: () => void }> = ({ orgName, onDismiss }) => {
+const GettingStarted: React.FC<{ orgName: string; onDismiss: () => void; showDismiss: boolean }> = ({ orgName, onDismiss, showDismiss }) => {
   const navigate = useNavigate();
 
   const gsStyles: Record<string, React.CSSProperties> = {
@@ -194,19 +200,21 @@ const GettingStarted: React.FC<{ orgName: string; onDismiss: () => void }> = ({ 
           </div>
         </div>
 
-        <div style={{ textAlign: 'center', marginTop: '8px' }}>
-          <span
-            onClick={onDismiss}
-            style={{
-              color: '#b0b8c1',
-              fontSize: '13px',
-              cursor: 'pointer',
-              textDecoration: 'none',
-            }}
-          >
-            I'll do this later
-          </span>
-        </div>
+        {showDismiss && (
+          <div style={{ textAlign: 'center', marginTop: '8px' }}>
+            <span
+              onClick={onDismiss}
+              style={{
+                color: '#b0b8c1',
+                fontSize: '13px',
+                cursor: 'pointer',
+                textDecoration: 'none',
+              }}
+            >
+              I'll do this later
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -271,11 +279,17 @@ export const Dashboard: React.FC = () => {
     );
   }
 
-  // Show Getting Started when no employees exist OR user hasn't dismissed it
-  if (employees.length === 0 && showOnboarding) {
+  // Show Getting Started:
+  // - If 0 employees: ALWAYS show (ignore dismiss state), hide dismiss link
+  // - If >0 employees and not dismissed: show with dismiss link
+  if (employees.length === 0 || (employees.length > 0 && showOnboarding)) {
     return (
       <div style={styles.container}>
-        <GettingStarted orgName={org?.name || ''} onDismiss={dismissOnboarding} />
+        <GettingStarted
+          orgName={org?.name || ''}
+          onDismiss={dismissOnboarding}
+          showDismiss={employees.length > 0}
+        />
       </div>
     );
   }
@@ -321,13 +335,13 @@ export const Dashboard: React.FC = () => {
           />
           <StatCard
             title="Focus Time Today"
-            value={`${Math.round((stats?.focusTimeMinutes || 0) / 60)}h`}
+            value={formatDuration(Math.round((stats?.focusTimeMinutes || 0) / 60 * 10) / 10)}
             icon="🎯"
             color="#27ae60"
           />
           <StatCard
             title="Idle/Wasted Time"
-            value={`${Math.round((stats?.distractedTimeMinutes || 0) / 60)}h`}
+            value={formatDuration(Math.round((stats?.distractedTimeMinutes || 0) / 60 * 10) / 10)}
             icon="💤"
             color="#e74c3c"
           />
@@ -380,7 +394,7 @@ export const Dashboard: React.FC = () => {
                         </span>
                       </div>
                       <div style={styles.employeeMeta}>
-                        {empActivity.hoursToday}h today • {emp.department}
+                        {formatDuration(empActivity.hoursToday)} today • {emp.department}
                       </div>
                     </>
                   ) : (
@@ -539,7 +553,7 @@ const BreakdownItem: React.FC<BreakdownItemProps> = ({ label, minutes, color }) 
         <span style={{ ...styles.breakdownDot, backgroundColor: color }} />
         {label}
       </div>
-      <div style={styles.breakdownValue}>{hours}h</div>
+      <div style={styles.breakdownValue}>{formatDuration(hours)}</div>
     </div>
   );
 };
