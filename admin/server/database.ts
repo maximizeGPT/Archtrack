@@ -423,13 +423,13 @@ export async function createActivity(orgId: string, activity: Activity): Promise
   );
 }
 
-export async function getActivityById(id: string): Promise<Activity | null> {
+export async function getActivityById(orgId: string, id: string): Promise<Activity | null> {
   const db = getDatabase();
-  const row = await db.get('SELECT * FROM activities WHERE id = ?', id);
+  const row = await db.get('SELECT * FROM activities WHERE id = ? AND org_id = ?', [id, orgId]);
   return row ? mapActivity(row) : null;
 }
 
-export async function updateActivity(id: string, updates: Partial<Activity>): Promise<void> {
+export async function updateActivity(orgId: string, id: string, updates: Partial<Activity>): Promise<void> {
   const db = getDatabase();
   const now = new Date().toISOString();
 
@@ -450,8 +450,9 @@ export async function updateActivity(id: string, updates: Partial<Activity>): Pr
 
   sets.push('updated_at = ?'); values.push(now);
   values.push(id);
+  values.push(orgId);
 
-  await db.run(`UPDATE activities SET ${sets.join(', ')} WHERE id = ?`, values);
+  await db.run(`UPDATE activities SET ${sets.join(', ')} WHERE id = ? AND org_id = ?`, values);
 }
 
 export async function getActivitiesByEmployee(
@@ -643,8 +644,9 @@ export async function updateTimeEntry(orgId: string, id: string, updates: Partia
   
   sets.push('updated_at = ?'); values.push(now);
   values.push(id);
-  
-  await db.run(`UPDATE time_entries SET ${sets.join(', ')} WHERE id = ?`, values);
+  values.push(orgId);
+
+  await db.run(`UPDATE time_entries SET ${sets.join(', ')} WHERE id = ? AND org_id = ?`, values);
 }
 
 export async function getActiveTimeEntries(orgId: string): Promise<TimeEntry[]> {
@@ -653,9 +655,9 @@ export async function getActiveTimeEntries(orgId: string): Promise<TimeEntry[]> 
   return rows.map(mapTimeEntry);
 }
 
-export async function getTimeEntryById(id: string): Promise<TimeEntry | null> {
+export async function getTimeEntryById(orgId: string, id: string): Promise<TimeEntry | null> {
   const db = getDatabase();
-  const row = await db.get('SELECT * FROM time_entries WHERE id = ?', id);
+  const row = await db.get('SELECT * FROM time_entries WHERE id = ? AND org_id = ?', [id, orgId]);
   return row ? mapTimeEntry(row) : null;
 }
 

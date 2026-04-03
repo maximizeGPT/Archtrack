@@ -192,6 +192,9 @@ async function checkActivity(): Promise<void> {
         
         activities.push(idleActivity);
         offlineQueue.push(idleActivity);
+        if (offlineQueue.length > 5000) {
+          offlineQueue.splice(0, offlineQueue.length - 5000);
+        }
         lastActivity = idleActivity;
         
         console.log(`[${new Date().toLocaleTimeString('en-US', { hour12: false })}] 💤 IDLE | User away for ${Math.round(idleTimeSec / 60)} minutes`);
@@ -269,6 +272,9 @@ async function checkActivity(): Promise<void> {
     if (shouldRecord) {
       activities.push(activity);
       offlineQueue.push(activity);
+      if (offlineQueue.length > 5000) {
+        offlineQueue.splice(0, offlineQueue.length - 5000);
+      }
       lastActivity = activity;
 
       logActivity(activity);
@@ -379,6 +385,12 @@ async function syncToServer(): Promise<void> {
         const result: any = await response.json();
         totalSynced += batch.length;
         totalSuspicious += result.data?.suspiciousCount || 0;
+      } else if (response.status === 401) {
+        // Token expired or invalid — stop retrying
+        console.error('Device token expired. Please re-enroll.');
+        isOnline = false;
+        offlineQueue.unshift(...batch);
+        break;
       } else {
         offlineQueue.unshift(...batch);
         console.error(`Sync failed for batch: ${response.statusText}`);

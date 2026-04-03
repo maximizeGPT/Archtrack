@@ -1,5 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import { createTimeEntry, updateTimeEntry, getEmployeeById, createActivity, getActivityById, updateActivity } from './database.js';
+import { verifyToken } from './auth.js';
+import type { URL } from 'url';
 
 interface ConnectedClient {
   ws: WebSocket;
@@ -12,10 +14,36 @@ interface ConnectedClient {
 const clients = new Map<WebSocket, ConnectedClient>();
 
 export function setupWebSocket(wss: WebSocketServer): void {
-  wss.on('connection', (ws: WebSocket) => {
+  wss.on('connection', (ws: WebSocket, req: any) => {
     console.log('🔌 New WebSocket connection');
-    
-    clients.set(ws, { ws });
+
+    // Authenticate via JWT in query params: ws://host/ws?token=JWT
+    let orgId: string | undefined;
+    let employeeId: string | undefined;
+    let isAdmin = false;
+
+    try {
+      const url = new (require('url').URL)(req.url, `http://${req.headers.host}`);
+      const token = url.searchParams.get('token');
+      if (!token) {
+        ws.close(4001, 'Authentication required: no token provided');
+        return;
+      }
+      const payload = verifyToken(token);
+      orgId = payload.orgId;
+      if (payload.type === 'device') {
+        employeeId = payload.employeeId;
+        isAdmin = false;
+      } else if (payload.type === 'dashboard') {
+        employeeId = payload.userId;
+        isAdmin = true;
+      }
+    } catch (err) {
+      ws.close(4002, 'Authentication failed: invalid or expired token');
+      return;
+    }
+
+    clients.set(ws, { ws, orgId, employeeId, isAdmin });
 
     ws.on('message', async (data: Buffer) => {
       try {
@@ -28,9 +56,9 @@ export function setupWebSocket(wss: WebSocketServer): void {
 
     ws.on('close', () => {
       const client = clients.get(ws);
-      if (client?.employeeId) {
-        // Notify admins that employee went offline
-        broadcastToAdmins({
+      if (client?.employeeId && client?.orgId) {
+        // Notify admins in the same org that employee went offline
+        broadcastToAdmins(client.orgId, {
           type: 'employee:offline',
           data: {
             employeeId: client.employeeId,
@@ -55,20 +83,18 @@ async function handleMessage(ws: WebSocket, message: any): Promise<void> {
 
   switch (message.type) {
     case 'register':
-      // Employee or admin registering
-      client.employeeId = message.employeeId;
+      // Employee or admin registering — use JWT-verified values, not self-reported
       client.employeeName = message.employeeName;
-      client.isAdmin = message.isAdmin || false;
-      
-      console.log(`👤 ${message.employeeName} (${message.employeeId}) registered`);
-      
+
+      console.log(`👤 ${client.employeeName} (${client.employeeId}) registered [org: ${client.orgId}]`);
+
       // Notify admins about new online employee
       if (!client.isAdmin) {
-        broadcastToAdmins({
+        broadcastToAdmins(client.orgId!, {
           type: 'employee:online',
           data: {
-            employeeId: message.employeeId,
-            employeeName: message.employeeName,
+            employeeId: client.employeeId,
+            employeeName: client.employeeName,
             timestamp: new Date().toISOString()
           }
         });
@@ -81,16 +107,16 @@ async function handleMessage(ws: WebSocket, message: any): Promise<void> {
       
       // Save to database
       try {
-        await createTimeEntry(client.orgId || 'org-default', message.entry);
+        await createTimeEntry(client.orgId!, message.entry);
       } catch (err) {
         console.error('Error saving time entry:', err);
       }
-      
-      // Broadcast to all admins
-      broadcastToAdmins({
+
+      // Broadcast to admins in the same org
+      broadcastToAdmins(client.orgId!, {
         type: 'time-entry:started',
         data: {
-          employeeId: message.employeeId,
+          employeeId: client.employeeId,
           employeeName: client.employeeName,
           entry: message.entry,
           timestamp: new Date().toISOString()
@@ -104,7 +130,7 @@ async function handleMessage(ws: WebSocket, message: any): Promise<void> {
       
       // Update in database
       try {
-        await updateTimeEntry(client.orgId || 'org-default', message.entry.id, {
+        await updateTimeEntry(client.orgId!, message.entry.id, {
           endTime: message.entry.endTime,
           duration: message.entry.duration,
           idleTime: message.entry.idleTime
@@ -112,12 +138,12 @@ async function handleMessage(ws: WebSocket, message: any): Promise<void> {
       } catch (err) {
         console.error('Error updating time entry:', err);
       }
-      
-      // Broadcast to all admins
-      broadcastToAdmins({
+
+      // Broadcast to admins in the same org
+      broadcastToAdmins(client.orgId!, {
         type: 'time-entry:stopped',
         data: {
-          employeeId: message.employeeId,
+          employeeId: client.employeeId,
           employeeName: client.employeeName,
           entry: message.entry,
           timestamp: new Date().toISOString()
@@ -137,12 +163,12 @@ async function handleMessage(ws: WebSocket, message: any): Promise<void> {
         for (const entry of message.entries) {
           try {
             // Check if activity already exists
-            const existing = await getActivityById(entry.id);
+            const existing = await getActivityById(client.orgId!, entry.id);
 
             if (existing) {
-              await updateActivity(entry.id, entry);
+              await updateActivity(client.orgId!, entry.id, entry);
             } else {
-              await createActivity(client.orgId || 'org-default', entry);
+              await createActivity(client.orgId!, entry);
             }
             successCount++;
           } catch (err: any) {
@@ -167,10 +193,10 @@ async function handleMessage(ws: WebSocket, message: any): Promise<void> {
 
         // Notify admins
         if (successCount > 0) {
-          broadcastToAdmins({
+          broadcastToAdmins(client.orgId!, {
             type: 'sync:completed',
             data: {
-              employeeId: message.employeeId,
+              employeeId: client.employeeId,
               employeeName: client.employeeName,
               count: successCount,
               timestamp: new Date().toISOString()
@@ -207,10 +233,10 @@ async function handleMessage(ws: WebSocket, message: any): Promise<void> {
   }
 }
 
-function broadcastToAdmins(message: any): void {
+function broadcastToAdmins(orgId: string, message: any): void {
   const data = JSON.stringify(message);
   clients.forEach((client) => {
-    if (client.isAdmin && client.ws.readyState === WebSocket.OPEN) {
+    if (client.isAdmin && client.orgId === orgId && client.ws.readyState === WebSocket.OPEN) {
       client.ws.send(data);
     }
   });
