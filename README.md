@@ -1,8 +1,10 @@
 # ArchTrack — Employee Time Tracking for Small Businesses
 
+**Live demo: [archtrack.live](https://archtrack.live)**
+
 **Know where your team's time goes. Without the enterprise price tag.**
 
-ArchTrack is a self-hosted employee tracking system. See who's working, what they're working on, and where time gets wasted — all in real-time from any device.
+ArchTrack is an open-source employee tracking SaaS. See who's working, what they're working on, and where time gets wasted — all in real-time from any device.
 
 ---
 
@@ -38,7 +40,7 @@ Wait about 2 minutes. When you see `ArchTrack is LIVE!`, you're done.
 
 ### 3. Sign Up
 
-Open `http://YOUR_DROPLET_IP` in your browser (the IP is shown in your DigitalOcean dashboard).
+Open `https://archtrack.live` in your browser (the IP is shown in your DigitalOcean dashboard).
 
 Click **Create Account**. Enter your company name, your name, email, and a password. You're in.
 
@@ -65,12 +67,12 @@ Create the config file with the setup token:
 mkdir -p ~/Library/Application\ Support/@archtrack/desktop
 
 # Write config (replace YOUR_TOKEN and YOUR_SERVER_IP):
-echo '{"deviceToken":"YOUR_DEVICE_TOKEN","serverUrl":"http://YOUR_SERVER_IP"}' > ~/Library/Application\ Support/@archtrack/desktop/config.json
+echo '{"deviceToken":"YOUR_DEVICE_TOKEN","serverUrl":"https://archtrack.live"}' > ~/Library/Application\ Support/@archtrack/desktop/config.json
 ```
 
 To get the device token, call the enrollment API with the setup token:
 ```bash
-curl -X POST http://YOUR_SERVER_IP/api/auth/enroll \
+curl -X POST https://archtrack.live/api/auth/enroll \
   -H "Content-Type: application/json" \
   -d '{"setupToken":"THE_SETUP_TOKEN_FROM_DASHBOARD"}'
 ```
