@@ -56,7 +56,7 @@ interface DashboardStats {
   employeeActivity: EmployeeActivity[];
 }
 
-const GettingStarted: React.FC<{ orgName: string }> = ({ orgName }) => {
+const GettingStarted: React.FC<{ orgName: string; onDismiss: () => void }> = ({ orgName, onDismiss }) => {
   const navigate = useNavigate();
 
   const gsStyles: Record<string, React.CSSProperties> = {
@@ -167,7 +167,11 @@ const GettingStarted: React.FC<{ orgName: string }> = ({ orgName }) => {
           <div style={gsStyles.stepContent}>
             <p style={gsStyles.stepTitle}>Generate a setup token</p>
             <p style={gsStyles.stepDesc}>
-              On the Employees page, click the <strong>Setup Token</strong> button next to an employee to generate a unique token for their desktop app.
+              On the{' '}
+              <span style={gsStyles.stepLink} onClick={() => navigate('/employees')}>
+                Employees page
+              </span>
+              , click the <strong>Setup Token</strong> button next to an employee to generate a unique token for their desktop app.
             </p>
           </div>
         </div>
@@ -189,6 +193,24 @@ const GettingStarted: React.FC<{ orgName: string }> = ({ orgName }) => {
             </p>
           </div>
         </div>
+
+        <button
+          onClick={onDismiss}
+          style={{
+            display: 'block',
+            width: '100%',
+            padding: '14px',
+            backgroundColor: 'transparent',
+            color: '#95a5a6',
+            border: '1px solid #e0e0e0',
+            borderRadius: '10px',
+            fontSize: '14px',
+            cursor: 'pointer',
+            marginTop: '4px',
+          }}
+        >
+          Skip — go to dashboard
+        </button>
       </div>
     </div>
   );
@@ -199,8 +221,16 @@ export const Dashboard: React.FC = () => {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    return localStorage.getItem('archtrack_onboarding_dismissed') !== 'true';
+  });
   const { onlineEmployees, recentActivity: _recentActivity } = useWebSocket();
   const { org } = useAuth();
+
+  const dismissOnboarding = () => {
+    localStorage.setItem('archtrack_onboarding_dismissed', 'true');
+    setShowOnboarding(false);
+  };
 
   useEffect(() => {
     loadData();
@@ -245,11 +275,11 @@ export const Dashboard: React.FC = () => {
     );
   }
 
-  // Show Getting Started when no employees exist
-  if (employees.length === 0) {
+  // Show Getting Started when no employees exist OR user hasn't dismissed it
+  if (employees.length === 0 && showOnboarding) {
     return (
       <div style={styles.container}>
-        <GettingStarted orgName={org?.name || ''} />
+        <GettingStarted orgName={org?.name || ''} onDismiss={dismissOnboarding} />
       </div>
     );
   }
