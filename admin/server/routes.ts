@@ -482,11 +482,17 @@ export function setupRoutes(app: Express): void {
         return res.status(400).json({ success: false, error: 'employeeId is required' });
       }
 
+      // Ensure endDate includes the full day (append T23:59:59 if it's just a date)
+      let endDateStr = endDate as string;
+      if (endDateStr && !endDateStr.includes('T')) {
+        endDateStr = endDateStr + 'T23:59:59';
+      }
+
       const activities = await getActivitiesByEmployee(
         req.orgId!,
         employeeId as string,
         startDate as string,
-        endDate as string
+        endDateStr
       );
 
       const employee = await getEmployeeById(req.orgId!, employeeId as string);
