@@ -343,6 +343,17 @@ export async function updateProject(orgId: string, id: string, updates: Partial<
   await db.run(`UPDATE projects SET ${sets.join(', ')} WHERE id = ? AND org_id = ?`, values);
 }
 
+/**
+ * Hard-delete a project. Any tasks under it are also deleted first so
+ * we don't leave orphaned task rows with a dangling project_id FK.
+ * Scoped to `orgId` so one org can never delete another's data.
+ */
+export async function deleteProject(orgId: string, id: string): Promise<void> {
+  const db = getDatabase();
+  await db.run('DELETE FROM tasks WHERE project_id = ? AND org_id = ?', [id, orgId]);
+  await db.run('DELETE FROM projects WHERE id = ? AND org_id = ?', [id, orgId]);
+}
+
 function mapProject(row: any): Project {
   return {
     id: row.id,
@@ -398,6 +409,11 @@ export async function updateTask(orgId: string, id: string, updates: Partial<Tas
 
   values.push(orgId);
   await db.run(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ? AND org_id = ?`, values);
+}
+
+export async function deleteTask(orgId: string, id: string): Promise<void> {
+  const db = getDatabase();
+  await db.run('DELETE FROM tasks WHERE id = ? AND org_id = ?', [id, orgId]);
 }
 
 function mapTask(row: any): Task {

@@ -1,8 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import type { Project } from '../../../shared-types';
+import { SUPPORTED_CURRENCIES, formatCurrency } from '../../../shared-types';
+import { useAuth } from '../contexts/AuthContext';
 
 export const Projects: React.FC = () => {
+  const { org } = useAuth();
+  const defaultCurrency = org?.defaultCurrency || 'USD';
+  const currencySymbol = SUPPORTED_CURRENCIES.find(c => c.code === defaultCurrency)?.symbol || '$';
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,6 +91,19 @@ export const Projects: React.FC = () => {
       budget: project.budget?.toString() || ''
     });
     setShowForm(true);
+  };
+
+  const handleDelete = async (project: Project) => {
+    const tasksWarning = 'Any tasks under this project will also be deleted.';
+    if (!confirm(`Delete "${project.name}"? ${tasksWarning}`)) return;
+    try {
+      const data = await api.delete(`/api/projects/${project.id}`);
+      if (!data.success) throw new Error(data.error || 'Failed to delete project');
+      loadProjects();
+    } catch (err) {
+      console.error('Error deleting project:', err);
+      setError(err instanceof Error ? err.message : 'Failed to delete project');
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -180,7 +198,7 @@ export const Projects: React.FC = () => {
                 />
               </div>
               <div style={styles.inputGroup}>
-                <label style={styles.label}>Budget ($)</label>
+                <label style={styles.label}>Budget ({currencySymbol} {defaultCurrency})</label>
                 <input
                   type="number"
                   placeholder="e.g. 50000"
@@ -261,9 +279,11 @@ export const Projects: React.FC = () => {
               {project.clientName && (
                 <p style={styles.info}>👤 {project.clientName}</p>
               )}
-              {project.budget && (
-                <p style={styles.info}>💰 Budget: ${project.budget.toLocaleString()}</p>
-              )}
+              {project.budget ? (
+                <p style={styles.info}>
+                  💰 Budget: {formatCurrency(project.budget, defaultCurrency)}
+                </p>
+              ) : null}
               <p style={styles.info}>
                 📅 Started: {new Date(project.startDate).toLocaleDateString()}
               </p>
@@ -271,6 +291,9 @@ export const Projects: React.FC = () => {
             <div style={styles.cardActions}>
               <button onClick={() => handleEdit(project)} style={styles.editButton}>
                 Edit
+              </button>
+              <button onClick={() => handleDelete(project)} style={styles.deleteButton}>
+                Delete
               </button>
             </div>
           </div>
@@ -477,6 +500,16 @@ const styles: { [key: string]: React.CSSProperties | any } = {
     flex: 1,
     padding: '8px',
     backgroundColor: '#3498db',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '13px'
+  },
+  deleteButton: {
+    flex: 1,
+    padding: '8px',
+    backgroundColor: '#e74c3c',
     color: '#fff',
     border: 'none',
     borderRadius: '6px',

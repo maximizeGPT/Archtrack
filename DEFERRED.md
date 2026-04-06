@@ -54,6 +54,31 @@ an issue we can bump to 15 s, but it would reduce granularity.
 
 ## 🟡 Nice to have
 
+### Genesis AI uses old AVG(productivity_score) formula
+**Status:** Deferred, separate scope
+**Why:** The 2026-04-06 math fix unified Dashboard + Reports on the
+`productive / (productive + unproductive)` formula via
+computeProductivityStats. Genesis AI's context builder in
+`admin/server/routes/ai-routes-llm.ts` (lines 86, 100, 116, 146) still
+queries `AVG(productivity_score)` directly from SQL, so its answers
+quote the old (diluted-by-neutral) score instead of the new one.
+Caught during live verification: Dashboard showed Mohammed at 99%,
+Genesis said 54% — same employee, same day, two formulas.
+
+**Fix:** Replace the four `AVG(productivity_score)` SQL fragments
+with activity-fetch + `computeProductivityStats(activities)`. Mirror
+the pattern used by `getEmployeeActivityStats` in database.ts.
+Low-risk because the AI prompt text stays the same; only the numeric
+inputs change.
+
+### Projects edit modal: currency hardcoded + no Delete
+**Status:** Deferred
+**Why:** Project budget input is labelled "Budget ($)" with a
+hardcoded dollar sign even though the app now supports per-org
+default currency. Also there's no Delete button on project cards.
+Fix both together: replace the `$` with the org's currency symbol
+from `formatCurrency`, and add a Delete button with a confirm.
+
 ### Edit Employee modal: Update click after BH toggle
 **Status:** Reproduce + fix in next batch
 **Observed during 2026-04-06 post-deploy verification:** After enabling

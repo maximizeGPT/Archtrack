@@ -166,6 +166,22 @@ export function setupRoutes(app: Express): void {
     }
   });
 
+  // Hard-delete a project. Also deletes any tasks under it so we don't
+  // leave orphans. Org-scoped via req.orgId.
+  app.delete('/api/projects/:id', requireAuth, async (req, res) => {
+    try {
+      const project = await getProjectById(req.orgId!, req.params.id);
+      if (!project) {
+        return res.status(404).json({ success: false, error: 'Project not found' });
+      }
+      const { deleteProject } = await import('./database.js');
+      await deleteProject(req.orgId!, req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+
   // Tasks
   app.get('/api/tasks', requireAuth, async (req, res) => {
     try {
@@ -203,6 +219,16 @@ export function setupRoutes(app: Express): void {
   app.put('/api/tasks/:id', requireAuth, async (req, res) => {
     try {
       await updateTask(req.orgId!, req.params.id, req.body);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+
+  app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
+    try {
+      const { deleteTask } = await import('./database.js');
+      await deleteTask(req.orgId!, req.params.id);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });

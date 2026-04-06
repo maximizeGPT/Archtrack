@@ -117,6 +117,18 @@ export const Tasks: React.FC = () => {
     }
   };
 
+  const handleDelete = async (task: Task) => {
+    if (!confirm(`Delete task "${task.name}"?`)) return;
+    try {
+      const data = await api.delete(`/api/tasks/${task.id}`);
+      if (!data.success) throw new Error(data.error || 'Failed to delete task');
+      setTasks(tasks.filter(t => t.id !== task.id));
+    } catch (err) {
+      console.error('Error deleting task:', err);
+      alert(err instanceof Error ? err.message : 'Failed to delete task');
+    }
+  };
+
   const getProjectName = (projectId: string) => {
     return projects.find(p => p.id === projectId)?.name || 'Unknown Project';
   };
@@ -397,6 +409,9 @@ export const Tasks: React.FC = () => {
               <button onClick={() => handleEdit(task)} style={styles.editButton}>
                 Edit
               </button>
+              <button onClick={() => handleDelete(task)} style={styles.deleteButton}>
+                Delete
+              </button>
             </div>
           </div>
         ))}
@@ -662,6 +677,20 @@ const styles: { [key: string]: React.CSSProperties | any } = {
     flex: 1,
     padding: '8px',
     backgroundColor: '#3498db',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '13px',
+    '@media (max-width: 768px)': {
+      padding: '12px',
+      fontSize: '14px'
+    }
+  },
+  deleteButton: {
+    flex: 1,
+    padding: '8px',
+    backgroundColor: '#e74c3c',
     color: '#fff',
     border: 'none',
     borderRadius: '6px',
