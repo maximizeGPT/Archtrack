@@ -54,6 +54,18 @@ an issue we can bump to 15 s, but it would reduce granularity.
 
 ## 🟡 Nice to have
 
+### Edit Employee modal: Update click after BH toggle
+**Status:** Reproduce + fix in next batch
+**Observed during 2026-04-06 post-deploy verification:** After enabling
+"Restrict tracking to business hours" and clicking Update, the form
+didn't submit on the first click (server still had old values). The
+direct API PUT worked fine, so this is a frontend-only issue — likely
+the Update button's click event getting intercepted by the BH panel's
+layout reflow, or a stale closure after the new setFormData call.
+Reproduce locally, check for stopPropagation / pointer-events issues,
+add a React Testing Library test that exercises the full BH toggle +
+submit path.
+
 ### Activity feed pagination + filters
 **Status:** Partially fixed (system-app filter added, sort tie-breaker added)
 **Remaining:** "Load more", employee filter, category filter in the UI.
