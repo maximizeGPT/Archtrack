@@ -129,7 +129,9 @@ export const Employees: React.FC = () => {
       return;
     }
     if (formData.businessHoursEnabled) {
-      if (!/^\d{2}:\d{2}$/.test(formData.businessHoursStart) || !/^\d{2}:\d{2}$/.test(formData.businessHoursEnd)) {
+      // Accept "HH:MM" or "HH:MM:SS" (some browsers emit seconds on type=time).
+      const timeRe = /^\d{1,2}:\d{2}(:\d{2})?$/;
+      if (!timeRe.test(formData.businessHoursStart) || !timeRe.test(formData.businessHoursEnd)) {
         setFormError('Business hours must be in HH:MM format');
         return;
       }
@@ -138,6 +140,10 @@ export const Employees: React.FC = () => {
         return;
       }
     }
+
+    // Normalize HH:MM:SS → HH:MM so the server always stores a consistent
+    // shape that matches the UI's time picker values on reload.
+    const normalizeTime = (v: string) => v.replace(/^(\d{1,2}:\d{2}).*$/, '$1').padStart(5, '0');
 
     const url = editingEmployee
       ? `/api/employees/${editingEmployee.id}`
@@ -152,8 +158,8 @@ export const Employees: React.FC = () => {
         hourlyRate: parseFloat(formData.hourlyRate) || 0,
         currency: formData.currency || defaultCurrency,
         timezone: formData.timezone || null,
-        businessHoursStart: formData.businessHoursEnabled ? formData.businessHoursStart : null,
-        businessHoursEnd:   formData.businessHoursEnabled ? formData.businessHoursEnd : null,
+        businessHoursStart: formData.businessHoursEnabled ? normalizeTime(formData.businessHoursStart) : null,
+        businessHoursEnd:   formData.businessHoursEnabled ? normalizeTime(formData.businessHoursEnd) : null,
         businessHoursDays:  formData.businessHoursEnabled ? formData.businessHoursDays.join(',') : null
       };
 

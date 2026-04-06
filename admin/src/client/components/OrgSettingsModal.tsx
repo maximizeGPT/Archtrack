@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { SUPPORTED_CURRENCIES } from '../../../shared-types';
@@ -51,10 +51,22 @@ export const OrgSettingsModal: React.FC<Props> = ({ onClose }) => {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Reset the error whenever the user changes anything meaningful.
   useEffect(() => { setError(null); }, [name, timezone, defaultCurrency, logoUrl]);
+
+  // Auto-clear the success flash after 1.5s so it doesn't linger.
+  useEffect(() => {
+    if (!flash) return;
+    const t = setTimeout(() => setFlash(null), 1500);
+    return () => clearTimeout(t);
+  }, [flash]);
+
+  // Close the modal when the user clicks backdrop or Cancel. Reusable so
+  // the Save path can also trigger it.
+  const closeModal = useCallback(() => onClose(), [onClose]);
 
   const handleSaveSettings = async () => {
     setError(null);
@@ -67,6 +79,9 @@ export const OrgSettingsModal: React.FC<Props> = ({ onClose }) => {
       });
       if (!res.success) throw new Error(res.error || 'Save failed');
       updateOrg({ name: res.data.name, timezone: res.data.timezone, defaultCurrency: res.data.defaultCurrency });
+      // Close the modal on success so the user gets clear feedback that
+      // the save completed. The sidebar already reflects the new values.
+      closeModal();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -98,6 +113,7 @@ export const OrgSettingsModal: React.FC<Props> = ({ onClose }) => {
       if (!res.success) throw new Error(res.error || 'Logo upload failed');
       setLogoUrl(res.data.logoUrl);
       updateOrg({ logoUrl: res.data.logoUrl });
+      setFlash('Logo uploaded');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -113,6 +129,7 @@ export const OrgSettingsModal: React.FC<Props> = ({ onClose }) => {
       if (!res.success) throw new Error(res.error || 'Logo removal failed');
       setLogoUrl(null);
       updateOrg({ logoUrl: null });
+      setFlash('Logo removed');
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -133,7 +150,7 @@ export const OrgSettingsModal: React.FC<Props> = ({ onClose }) => {
         justifyContent: 'center',
         zIndex: 2000
       }}
-      onClick={onClose}
+      onClick={closeModal}
     >
       <div
         onClick={e => e.stopPropagation()}
@@ -150,7 +167,7 @@ export const OrgSettingsModal: React.FC<Props> = ({ onClose }) => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <h2 style={{ margin: 0, color: '#2c3e50' }}>Organization Settings</h2>
           <button
-            onClick={onClose}
+            onClick={closeModal}
             aria-label="Close"
             style={{
               background: 'none',
@@ -175,6 +192,21 @@ export const OrgSettingsModal: React.FC<Props> = ({ onClose }) => {
             fontSize: '13px'
           }}>
             ⚠️ {error}
+          </div>
+        )}
+
+        {flash && !error && (
+          <div style={{
+            backgroundColor: '#f0f9f0',
+            border: '1px solid #c6e6c6',
+            color: '#27ae60',
+            padding: '10px 12px',
+            borderRadius: '6px',
+            marginBottom: '12px',
+            fontSize: '13px',
+            fontWeight: 500
+          }}>
+            ✅ {flash}
           </div>
         )}
 
@@ -288,7 +320,7 @@ export const OrgSettingsModal: React.FC<Props> = ({ onClose }) => {
         </section>
 
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-          <button type="button" onClick={onClose} style={ghostBtn}>Cancel</button>
+          <button type="button" onClick={closeModal} style={ghostBtn}>Cancel</button>
           <button
             type="button"
             onClick={handleSaveSettings}
