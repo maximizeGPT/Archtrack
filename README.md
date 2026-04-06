@@ -13,7 +13,10 @@ ArchTrack is an open-source employee tracking SaaS. See who's working, what they
 - **Real-time dashboard** — see who's online, what app they're using, productivity scores
 - **AI assistant** — ask "Who was most productive today?" in plain English
 - **Automatic tracking** — silent desktop app, no timesheets, no manual entry
-- **Smart role detection** — auto-detects if someone is a developer, designer, manager, etc. and adjusts scoring
+- **Smart role detection** — auto-detects if someone is a developer, designer, manager, etc. and adjusts scoring (admins can override)
+- **Business hours** — set per-employee working hours; activity outside hours is shown separately, not counted against productivity
+- **Multi-currency** — pick from 15+ currencies for each employee's hourly rate (USD, EUR, GBP, INR, AED, and more)
+- **Company branding** — upload your own logo to replace the ArchTrack wordmark in the sidebar
 - **Multi-tenant** — multiple businesses on one server, completely isolated data
 - **Mobile friendly** — check your dashboard from your phone
 
@@ -60,7 +63,7 @@ Start the tracker:
 npx electron .
 ```
 
-> **Mac users:** Grant **Screen Recording** permission when prompted (System Settings > Privacy & Security > Screen Recording > Electron).
+> See **[Desktop Tracker Permissions](#desktop-tracker-permissions)** below for what each OS needs on first run.
 
 ### 4. Watch It Work
 
@@ -80,6 +83,64 @@ Works on DigitalOcean ($6/month droplet), AWS, or any VPS. Add a custom domain +
 ```bash
 certbot --nginx -d yourdomain.com
 ```
+
+---
+
+## Desktop Tracker Permissions
+
+The tracker reads the active window's title and owning process. Different
+operating systems gate this differently, so on the very first run each
+employee will need to grant a small set of permissions.
+
+### macOS (10.15 Catalina and newer)
+
+macOS requires two permissions, both granted from **System Settings → Privacy
+& Security**:
+
+1. **Screen Recording** — lets the tracker read the active window title.
+   Without this, the tracker only sees the app bundle ID and every window
+   will look the same. When you first run `npx electron .` macOS will prompt
+   you; click **Open System Settings** and enable **ArchTrack** (or
+   **Electron** during dev).
+   - Settings path: **Privacy & Security → Screen Recording → toggle on
+     ArchTrack**.
+   - After toggling, macOS asks you to quit and relaunch the app.
+2. **Accessibility** *(optional, recommended)* — only needed if you want
+   idle-detection to read keyboard/mouse activity. Skip it if you just want
+   window-title tracking.
+   - Settings path: **Privacy & Security → Accessibility → toggle on
+     ArchTrack**.
+
+> ⚠️ **Ventura and later** hide the Screen Recording prompt until the tracker
+> actually tries to capture a frame, so you may need to click around a bit
+> before the prompt appears. If it doesn't, open System Settings manually and
+> add ArchTrack yourself with the **+** button.
+
+### Windows (10 and newer)
+
+Windows does not require an explicit permission for reading window titles —
+the tracker uses standard user-level APIs (`GetForegroundWindow`). However,
+you may see friction on first run:
+
+1. **SmartScreen warning** — because the tracker binary isn't signed yet, the
+   first launch may show "Windows protected your PC". Click **More info →
+   Run anyway**. This only happens once per machine.
+2. **Microsoft Defender / corporate AV** — some EDR products (CrowdStrike,
+   SentinelOne, etc.) quarantine unsigned Electron apps by default. If the
+   tracker exits immediately, add an exclusion for the ArchTrack folder or
+   work with IT to whitelist the binary.
+3. **Group Policy** — in locked-down enterprise environments, policy may
+   block side-loaded Electron apps. You may need IT to push the tracker as
+   an approved MSI.
+
+No Accessibility or Screen Recording toggles are needed on Windows.
+
+### Linux
+
+The desktop tracker is **not officially supported on Linux yet**. Support
+for Wayland/X11 window-title reading is tracked in `DEFERRED.md`. For now,
+we recommend running the tracker on a Mac or Windows box that mirrors the
+Linux user's activity (e.g. developer workstations).
 
 ---
 
@@ -108,7 +169,30 @@ The system watches what apps an employee uses and auto-detects their job type:
 - **Sales** — Salesforce, LinkedIn, CRM tools
 - **Data Analyst** — Jupyter, Tableau, Excel
 
-Admins can override if the auto-detection is wrong.
+Admins can override it from **Employees → Edit Employee → Job Type**.
+
+### Business Hours (per employee)
+Each employee can have configured working hours (e.g. "Mon–Fri 09:00–17:30,
+Asia/Kolkata"). Activity captured outside those hours is still stored — so
+admins can audit it — but it is **not** counted in the employee's Total,
+Productive, or Productivity Score. Instead it appears in a separate
+"Outside Business Hours" card on the Report. Leave it unset (the default)
+to track 24/7 — great for solopreneurs.
+
+### Company Branding
+Click the ArchTrack logo in the sidebar to open **Organization Settings**:
+- Upload a custom company logo (PNG, JPEG, WebP, SVG, max 1 MB). It replaces
+  the ArchTrack wordmark in the sidebar for everyone in the org. Leave it
+  empty for the clean default.
+- Set the organization's timezone (used for the "today" boundary on the
+  Dashboard and as the default for new employees).
+- Pick the default currency for new employees.
+
+### Multi-Currency Hourly Rates
+When adding or editing an employee, pick a currency from the dropdown next
+to their hourly rate. Supported: USD, EUR, GBP, INR, CAD, AUD, JPY, AED,
+SAR, SGD, BRL, MXN, ZAR, CHF, CNY. Reports and the Employees list format the
+rate with the appropriate symbol.
 
 ### Multi-Tenant
 - Each business is completely isolated
@@ -129,7 +213,15 @@ Admins can override if the auto-detection is wrong.
 
 - **Admin dashboard:** React SPA served by Express
 - **API:** Express + SQLite (upgradeable to Postgres)
-- **Desktop tracker:** Electron app, syncs every 30 seconds
+- **Desktop tracker:** Electron app — samples the active window every **10
+  seconds**, batches them, and syncs to the server every **60 seconds**.
+- **Productivity math:** Dashboard and Reports share one formula —
+  `score = productive ÷ (productive + unproductive) × 100`. "Other" /
+  neutral and idle/break time are tracked separately and never dilute the
+  score. The math always reconciles: every shown bucket sums to the total.
+- **Timezones:** the dashboard's "today" window is computed in the admin's
+  local timezone (sent with each request). Each organization also stores a
+  default timezone, and each employee can override theirs.
 - **Auth:** JWT tokens (24h dashboard, 90d device)
 - **Process manager:** PM2 (auto-restart on crash)
 - **Reverse proxy:** nginx (port 80 -> 3001, WebSocket support)
@@ -164,12 +256,21 @@ All endpoints require `Authorization: Bearer <token>` header (except auth endpoi
 ### Employees & Activities
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/employees` | GET/POST | List or create employees |
+| `/api/employees` | GET/POST | List or create employees (supports `currency`, `timezone`, `businessHoursStart`, `businessHoursEnd`, `businessHoursDays`) |
+| `/api/employees/:id` | PUT/DELETE | Update or deactivate an employee |
 | `/api/activities` | GET | Get tracked activities |
 | `/api/activity` | POST | Desktop tracker syncs here |
-| `/api/dashboard/stats` | GET | Dashboard overview data |
-| `/api/roles` | GET | Smart role detection status |
-| `/api/roles/:id` | PUT | Override detected role |
+| `/api/dashboard/stats?tz=<IANA>` | GET | Dashboard overview data for the admin's local day |
+| `/api/reports/productivity?employeeId=&startDate=&endDate=&tz=` | GET | Productivity report (same tz-aware bounds + business-hours filter) |
+| `/api/roles/:id` | GET/PUT | Smart role detection status / override (`roleType`: developer, designer, architect, manager, sales, data_analyst, writer, auto) |
+
+### Organization settings (new)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/organization` | GET | Returns name, slug, timezone, logoUrl, defaultCurrency |
+| `/api/organization` | PUT | Update name / timezone / defaultCurrency |
+| `/api/organization/logo` | POST | Upload logo. Body: `{ mimeType, dataBase64 }`. Max 1 MB. PNG/JPEG/WebP/SVG. |
+| `/api/organization/logo` | DELETE | Remove the current logo |
 
 ---
 
@@ -177,7 +278,9 @@ All endpoints require `Authorization: Bearer <token>` header (except auth endpoi
 
 **Server:** Ubuntu 20.04+, 1GB RAM, 1 CPU ($6/month on DigitalOcean)
 
-**Desktop tracker:** Mac or Windows, Node.js 18+, Screen Recording permission (Mac)
+**Desktop tracker:** Node.js 18+ on Mac or Windows. See
+[Desktop Tracker Permissions](#desktop-tracker-permissions) for the
+per-OS first-run setup. Linux is not yet supported.
 
 **Dashboard:** Any modern browser (phone or computer)
 
