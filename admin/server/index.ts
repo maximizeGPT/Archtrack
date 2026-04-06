@@ -12,6 +12,7 @@ import { setupWebSocket } from './websocket.js';
 import aiRoutes from './routes/ai-routes.js';
 import aiLLMRoutes from './routes/ai-routes-llm.js';
 import { setupAuthRoutes } from './routes/auth-routes.js';
+import { setupOrgRoutes } from './routes/org-routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -99,6 +100,7 @@ async function startServer() {
     // Step 3: Setup API routes
     console.log('🛣️  Setting up API routes...');
     setupAuthRoutes(app);  // Auth routes first (signup/login are public)
+    setupOrgRoutes(app);   // Organization settings + logo upload
     setupRoutes(app);
     app.use('/api/ai', aiRoutes);
     app.use('/api/ai-llm', aiLLMRoutes);
@@ -108,6 +110,18 @@ async function startServer() {
     const staticPath = findStaticPath();
     console.log(`📂 Serving static files from: ${staticPath}`);
     app.use(express.static(staticPath));
+
+    // Serve user-uploaded files (company logos, etc.) from admin/data/uploads/.
+    // This lives next to the SQLite db, so backups and migrations see both.
+    const uploadsDir = path.join(__dirname, '../../data/uploads');
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true });
+    }
+    console.log(`📎 Serving uploads from: ${uploadsDir}`);
+    app.use('/uploads', express.static(uploadsDir, {
+      maxAge: '1d',
+      fallthrough: true
+    }));
     
     // SPA fallback
     app.get('*', (req, res) => {

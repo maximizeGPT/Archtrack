@@ -14,6 +14,9 @@ interface User {
 interface Org {
   id: string;
   name: string;
+  timezone?: string;
+  logoUrl?: string | null;
+  defaultCurrency?: string;
 }
 
 interface AuthContextValue {
@@ -24,6 +27,7 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, name: string, orgName: string) => Promise<void>;
   logout: () => void;
+  updateOrg: (patch: Partial<Org>) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -82,7 +86,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signup = async (email: string, password: string, name: string, orgName: string) => {
-    const res = await api.post('/api/auth/signup', { email, password, name, orgName });
+    // Include the browser's IANA timezone so the new org defaults to the
+    // admin's actual timezone, not UTC.
+    let timezone: string | undefined;
+    try {
+      timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+    } catch {
+      timezone = undefined;
+    }
+    const res = await api.post('/api/auth/signup', { email, password, name, orgName, timezone });
     const d = res.data;
     localStorage.setItem(TOKEN_KEY, d.accessToken);
     if (d.refreshToken) {
@@ -91,6 +103,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUser(d.user);
     setOrg(d.org || null);
   };
+
+  const updateOrg = useCallback((patch: Partial<Org>) => {
+    setOrg(prev => prev ? { ...prev, ...patch } : prev);
+  }, []);
 
   return (
     <AuthContext.Provider
@@ -102,6 +118,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         signup,
         logout,
+        updateOrg,
       }}
     >
       {children}

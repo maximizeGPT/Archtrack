@@ -10,6 +10,7 @@ import { Signup } from './pages/Signup';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { GenesisAI } from './components/GenesisAI';
+import { OrgSettingsModal } from './components/OrgSettingsModal';
 import { WebSocketProvider } from './contexts/WebSocketContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import './App.css';
@@ -69,6 +70,7 @@ const AppContent: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('loading');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [showOrgSettings, setShowOrgSettings] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { logout, org, user } = useAuth();
@@ -140,13 +142,55 @@ const AppContent: React.FC = () => {
       {/* Sidebar */}
       <aside className={`sidebar ${isMobile ? 'mobile' : ''} ${isMobileMenuOpen ? 'open' : ''}`}>
         {!isMobile && (
-          <div className="logo">
-            <h1>ArchTrack</h1>
-            <span>Admin</span>
-            {org?.name && (
-              <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', fontWeight: 400 }}>
-                {org.name}
+          <div
+            className="logo"
+            onClick={() => setShowOrgSettings(true)}
+            role="button"
+            tabIndex={0}
+            aria-label="Open organization settings"
+            title="Click to edit organization settings"
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') setShowOrgSettings(true);
+            }}
+            style={{ cursor: 'pointer' }}
+          >
+            {org?.logoUrl ? (
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px'
+              }}>
+                <img
+                  src={org.logoUrl}
+                  alt={org.name || 'Organization logo'}
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    objectFit: 'contain',
+                    backgroundColor: 'rgba(255,255,255,0.08)'
+                  }}
+                  onError={e => {
+                    // If the image 404s (e.g. file was manually deleted on the
+                    // server), fall back to the text logo gracefully.
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+                <div>
+                  <h1 style={{ margin: 0 }}>{org.name || 'ArchTrack'}</h1>
+                  <span style={{ fontSize: '11px', color: '#94a3b8' }}>Admin</span>
+                </div>
               </div>
+            ) : (
+              <>
+                <h1>ArchTrack</h1>
+                <span>Admin</span>
+                {org?.name && (
+                  <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px', fontWeight: 400 }}>
+                    {org.name}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -262,6 +306,10 @@ const AppContent: React.FC = () => {
           <Route path="*" element={<Dashboard />} />
         </Routes>
       </main>
+
+      {showOrgSettings && (
+        <OrgSettingsModal onClose={() => setShowOrgSettings(false)} />
+      )}
     </div>
   );
 };
