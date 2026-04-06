@@ -157,11 +157,13 @@ export const OrgSettingsModal: React.FC<Props> = ({ onClose }) => {
         style={{
           backgroundColor: '#fff',
           borderRadius: '12px',
-          padding: '32px',
+          padding: 'clamp(16px, 4vw, 32px)',
           width: '100%',
           maxWidth: '520px',
           maxHeight: '90vh',
-          overflowY: 'auto'
+          overflowY: 'auto',
+          margin: '0 12px',
+          boxSizing: 'border-box'
         }}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>

@@ -125,9 +125,42 @@ const AppContent: React.FC = () => {
       {/* Mobile Header */}
       {isMobile && (
         <header className="mobile-header">
-          <div className="mobile-logo">
-            <h1>ArchTrack</h1>
-            <span>Admin</span>
+          <div
+            className="mobile-logo"
+            onClick={() => setShowOrgSettings(true)}
+            role="button"
+            tabIndex={0}
+            aria-label="Open organization settings"
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') setShowOrgSettings(true);
+            }}
+            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}
+          >
+            {org?.logoUrl ? (
+              <>
+                <img
+                  src={org.logoUrl}
+                  alt={org.name || 'Organization logo'}
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '6px',
+                    objectFit: 'contain',
+                    backgroundColor: 'rgba(255,255,255,0.08)'
+                  }}
+                  onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                />
+                <div style={{ lineHeight: 1.1 }}>
+                  <h1 style={{ margin: 0, fontSize: '16px' }}>{org.name || 'ArchTrack'}</h1>
+                  <span style={{ fontSize: '10px', color: '#94a3b8' }}>Admin</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <h1>ArchTrack</h1>
+                <span>Admin</span>
+              </>
+            )}
           </div>
           <button
             className="mobile-menu-btn"
@@ -226,6 +259,17 @@ const AppContent: React.FC = () => {
             active={currentPage === 'reports'}
             onClick={() => handleNavClick('reports')}
           />
+          {isMobile && (
+            <NavItem
+              label="Settings"
+              icon="⚙️"
+              active={false}
+              onClick={() => {
+                setShowOrgSettings(true);
+                setIsMobileMenuOpen(false);
+              }}
+            />
+          )}
         </nav>
 
         <div style={{ marginTop: 'auto', padding: '16px' }}>
