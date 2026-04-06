@@ -1,8 +1,86 @@
 import React, { useState, useEffect } from 'react';
 import type { Employee } from '../../../shared-types';
+import { SUPPORTED_CURRENCIES, formatCurrency, JOB_ROLES } from '../../../shared-types';
 import { api } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
+
+// Common IANA timezones offered in the per-employee timezone dropdown.
+// Covers North America + Europe + APAC + Middle East — admins can leave it
+// empty to inherit the organization's timezone.
+const COMMON_TIMEZONES = [
+  'UTC',
+  'America/New_York',
+  'America/Chicago',
+  'America/Denver',
+  'America/Los_Angeles',
+  'America/Toronto',
+  'America/Mexico_City',
+  'America/Sao_Paulo',
+  'Europe/London',
+  'Europe/Paris',
+  'Europe/Berlin',
+  'Europe/Madrid',
+  'Europe/Amsterdam',
+  'Europe/Istanbul',
+  'Africa/Johannesburg',
+  'Asia/Dubai',
+  'Asia/Riyadh',
+  'Asia/Karachi',
+  'Asia/Kolkata',
+  'Asia/Dhaka',
+  'Asia/Bangkok',
+  'Asia/Singapore',
+  'Asia/Hong_Kong',
+  'Asia/Shanghai',
+  'Asia/Tokyo',
+  'Asia/Seoul',
+  'Australia/Sydney',
+  'Pacific/Auckland'
+];
+
+const WEEKDAY_OPTIONS: Array<{ value: number; label: string }> = [
+  { value: 1, label: 'Mon' },
+  { value: 2, label: 'Tue' },
+  { value: 3, label: 'Wed' },
+  { value: 4, label: 'Thu' },
+  { value: 5, label: 'Fri' },
+  { value: 6, label: 'Sat' },
+  { value: 7, label: 'Sun' }
+];
+
+interface EmployeeFormData {
+  name: string;
+  email: string;
+  role: string;
+  department: string;
+  hourlyRate: string;
+  currency: string;
+  timezone: string;            // '' = inherit org tz
+  businessHoursEnabled: boolean;
+  businessHoursStart: string;  // "HH:MM"
+  businessHoursEnd: string;    // "HH:MM"
+  businessHoursDays: number[]; // ISO weekdays: 1..7
+  jobRoleType: string;         // 'auto' | 'developer' | ...
+}
+
+const emptyFormData = (defaultCurrency: string): EmployeeFormData => ({
+  name: '',
+  email: '',
+  role: 'employee',
+  department: '',
+  hourlyRate: '',
+  currency: defaultCurrency,
+  timezone: '',
+  businessHoursEnabled: false,
+  businessHoursStart: '09:00',
+  businessHoursEnd: '17:00',
+  businessHoursDays: [1, 2, 3, 4, 5],
+  jobRoleType: 'auto'
+});
 
 export const Employees: React.FC = () => {
+  const { org } = useAuth();
+  const defaultCurrency = org?.defaultCurrency || 'USD';
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -10,13 +88,7 @@ export const Employees: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [setupToken, setSetupToken] = useState<{ token: string; employeeName: string } | null>(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    role: 'employee',
-    department: '',
-    hourlyRate: ''
-  });
+  const [formData, setFormData] = useState<EmployeeFormData>(emptyFormData(defaultCurrency));
 
   useEffect(() => {
     loadEmployees();
@@ -56,43 +128,99 @@ export const Employees: React.FC = () => {
       setFormError('Please enter a valid email address');
       return;
     }
+    if (formData.businessHoursEnabled) {
+      if (!/^\d{2}:\d{2}$/.test(formData.businessHoursStart) || !/^\d{2}:\d{2}$/.test(formData.businessHoursEnd)) {
+        setFormError('Business hours must be in HH:MM format');
+        return;
+      }
+      if (formData.businessHoursDays.length === 0) {
+        setFormError('Pick at least one business day');
+        return;
+      }
+    }
 
     const url = editingEmployee
       ? `/api/employees/${editingEmployee.id}`
       : '/api/employees';
 
     try {
-      const payload = {
-        ...formData,
-        hourlyRate: parseFloat(formData.hourlyRate) || 0
+      const payload: any = {
+        name: formData.name,
+        email: formData.email,
+        role: formData.role,
+        department: formData.department,
+        hourlyRate: parseFloat(formData.hourlyRate) || 0,
+        currency: formData.currency || defaultCurrency,
+        timezone: formData.timezone || null,
+        businessHoursStart: formData.businessHoursEnabled ? formData.businessHoursStart : null,
+        businessHoursEnd:   formData.businessHoursEnabled ? formData.businessHoursEnd : null,
+        businessHoursDays:  formData.businessHoursEnabled ? formData.businessHoursDays.join(',') : null
       };
 
       const data = editingEmployee
         ? await api.put(url, payload)
         : await api.post(url, payload);
 
-      if (data.success) {
-        setShowForm(false);
-        setEditingEmployee(null);
-        setFormData({ name: '', email: '', role: 'employee', department: '', hourlyRate: '' });
-        loadEmployees();
-      } else {
+      if (!data.success) {
         throw new Error(data.error || 'Failed to save employee');
       }
+
+      const savedEmployeeId = editingEmployee?.id || data.data?.id;
+
+      // If admin picked a non-auto job role, push it via the role override endpoint.
+      if (savedEmployeeId && formData.jobRoleType && formData.jobRoleType !== 'auto') {
+        try {
+          await api.put(`/api/roles/${savedEmployeeId}`, { roleType: formData.jobRoleType });
+        } catch (roleErr) {
+          console.warn('Role override failed (employee saved OK):', roleErr);
+        }
+      }
+
+      setShowForm(false);
+      setEditingEmployee(null);
+      setFormData(emptyFormData(defaultCurrency));
+      loadEmployees();
     } catch (err) {
       console.error('Error saving employee:', err);
       setFormError(err instanceof Error ? err.message : 'Failed to save employee');
     }
   };
 
-  const handleEdit = (employee: Employee) => {
+  const handleEdit = async (employee: Employee) => {
     setEditingEmployee(employee);
+
+    // Parse business hours days "1,2,3,4,5" → [1,2,3,4,5]
+    const daysArr = (employee.businessHoursDays || '')
+      .split(',')
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => n >= 1 && n <= 7);
+
+    // Fetch the currently detected/overridden job role so we can pre-fill the
+    // dropdown. Failures here fall back silently to "auto" so editing still works
+    // even if the role endpoint is flaky.
+    let currentJobRole = 'auto';
+    try {
+      const roleRes = await api.get(`/api/roles/${employee.id}`);
+      if (roleRes?.success && roleRes.data?.status === 'admin_override') {
+        currentJobRole = roleRes.data.roleType || 'auto';
+      }
+    } catch {
+      /* silent */
+    }
+
     setFormData({
       name: employee.name,
       email: employee.email,
       role: employee.role,
       department: employee.department || '',
-      hourlyRate: employee.hourlyRate?.toString() || ''
+      hourlyRate: employee.hourlyRate?.toString() || '',
+      currency: employee.currency || defaultCurrency,
+      timezone: employee.timezone || '',
+      businessHoursEnabled: !!(employee.businessHoursStart && employee.businessHoursEnd && daysArr.length),
+      businessHoursStart: employee.businessHoursStart || '09:00',
+      businessHoursEnd:   employee.businessHoursEnd   || '17:00',
+      businessHoursDays:  daysArr.length > 0 ? daysArr : [1, 2, 3, 4, 5],
+      jobRoleType: currentJobRole
     });
     setShowForm(true);
   };
@@ -150,7 +278,7 @@ export const Employees: React.FC = () => {
           style={styles.addButton}
           onClick={() => {
             setEditingEmployee(null);
-            setFormData({ name: '', email: '', role: 'employee', department: '', hourlyRate: '' });
+            setFormData(emptyFormData(defaultCurrency));
             setShowForm(true);
           }}
         >
@@ -220,16 +348,133 @@ export const Employees: React.FC = () => {
                 />
               </div>
               <div style={styles.inputGroup}>
-                <label style={styles.label}>Hourly Rate ($)</label>
-                <input
-                  type="number"
-                  placeholder="e.g. 50"
-                  value={formData.hourlyRate}
-                  onChange={e => setFormData({...formData, hourlyRate: e.target.value})}
+                <label style={styles.label}>Hourly Rate</label>
+                <div style={{ display: 'flex', gap: '8px' }}>
+                  <select
+                    value={formData.currency}
+                    onChange={e => setFormData({ ...formData, currency: e.target.value })}
+                    style={{ ...styles.input, flex: '0 0 110px' }}
+                    aria-label="Currency"
+                  >
+                    {SUPPORTED_CURRENCIES.map(c => (
+                      <option key={c.code} value={c.code}>{c.symbol} {c.code}</option>
+                    ))}
+                  </select>
+                  <input
+                    type="number"
+                    placeholder="e.g. 50"
+                    value={formData.hourlyRate}
+                    onChange={e => setFormData({ ...formData, hourlyRate: e.target.value })}
+                    style={{ ...styles.input, flex: 1 }}
+                    min="0"
+                    step="0.01"
+                  />
+                </div>
+              </div>
+
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Job Type (for productivity scoring)</label>
+                <select
+                  value={formData.jobRoleType}
+                  onChange={e => setFormData({ ...formData, jobRoleType: e.target.value })}
                   style={styles.input}
-                  min="0"
-                  step="0.01"
-                />
+                >
+                  {JOB_ROLES.map(r => (
+                    <option key={r.id} value={r.id}>
+                      {r.icon}  {r.label}
+                    </option>
+                  ))}
+                </select>
+                <div style={{ fontSize: '11px', color: '#95a5a6', marginTop: '4px' }}>
+                  "Auto-detect" lets ArchTrack pick based on app usage. Override here if it's wrong.
+                </div>
+              </div>
+
+              <div style={styles.inputGroup}>
+                <label style={styles.label}>Timezone</label>
+                <select
+                  value={formData.timezone}
+                  onChange={e => setFormData({ ...formData, timezone: e.target.value })}
+                  style={styles.input}
+                >
+                  <option value="">Inherit organization ({org?.timezone || 'UTC'})</option>
+                  {COMMON_TIMEZONES.map(tz => (
+                    <option key={tz} value={tz}>{tz}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div style={styles.inputGroup}>
+                <label style={{ ...styles.label, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.businessHoursEnabled}
+                    onChange={e => setFormData({ ...formData, businessHoursEnabled: e.target.checked })}
+                  />
+                  Restrict tracking to business hours
+                </label>
+                {formData.businessHoursEnabled && (
+                  <div style={{
+                    marginTop: '8px',
+                    padding: '12px',
+                    backgroundColor: '#f8f9fa',
+                    borderRadius: '6px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <span style={{ fontSize: '12px', color: '#555', minWidth: '40px' }}>Start</span>
+                      <input
+                        type="time"
+                        value={formData.businessHoursStart}
+                        onChange={e => setFormData({ ...formData, businessHoursStart: e.target.value })}
+                        style={{ ...styles.input, flex: 1 }}
+                      />
+                      <span style={{ fontSize: '12px', color: '#555', minWidth: '30px', textAlign: 'right' as const }}>End</span>
+                      <input
+                        type="time"
+                        value={formData.businessHoursEnd}
+                        onChange={e => setFormData({ ...formData, businessHoursEnd: e.target.value })}
+                        style={{ ...styles.input, flex: 1 }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' as const }}>
+                      {WEEKDAY_OPTIONS.map(day => {
+                        const selected = formData.businessHoursDays.includes(day.value);
+                        return (
+                          <button
+                            type="button"
+                            key={day.value}
+                            onClick={() => {
+                              setFormData(prev => ({
+                                ...prev,
+                                businessHoursDays: selected
+                                  ? prev.businessHoursDays.filter(d => d !== day.value)
+                                  : [...prev.businessHoursDays, day.value].sort()
+                              }));
+                            }}
+                            style={{
+                              padding: '6px 12px',
+                              borderRadius: '6px',
+                              border: '1px solid #ddd',
+                              cursor: 'pointer',
+                              backgroundColor: selected ? '#3498db' : '#fff',
+                              color: selected ? '#fff' : '#555',
+                              fontSize: '12px',
+                              fontWeight: 500
+                            }}
+                          >
+                            {day.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <div style={{ fontSize: '11px', color: '#95a5a6' }}>
+                      Activity tracked outside these hours is stored but shown separately in Reports.
+                    </div>
+                  </div>
+                )}
               </div>
               <div style={styles.formButtons}>
                 <button
@@ -356,7 +601,7 @@ export const Employees: React.FC = () => {
           <button
             onClick={() => {
               setEditingEmployee(null);
-              setFormData({ name: '', email: '', role: 'employee', department: '', hourlyRate: '' });
+              setFormData(emptyFormData(defaultCurrency));
               setShowForm(true);
             }}
             style={{
@@ -385,7 +630,22 @@ export const Employees: React.FC = () => {
             <div style={styles.cardBody}>
               <p style={styles.info}>📧 {employee.email}</p>
               {employee.department && <p style={styles.info}>🏢 {employee.department}</p>}
-              {employee.hourlyRate && <p style={styles.info}>💰 ${employee.hourlyRate}/hr</p>}
+              {employee.hourlyRate ? (
+                <p style={styles.info}>
+                  💰 {formatCurrency(employee.hourlyRate, employee.currency || defaultCurrency)}/hr
+                </p>
+              ) : null}
+              {employee.businessHoursStart && employee.businessHoursEnd && employee.businessHoursDays ? (
+                <p style={styles.info}>
+                  🕘 {employee.businessHoursStart}–{employee.businessHoursEnd}
+                  {' '}({employee.businessHoursDays})
+                </p>
+              ) : null}
+              {employee.timezone ? (
+                <p style={{ ...styles.info, fontSize: '12px', color: '#95a5a6' }}>
+                  🌐 {employee.timezone}
+                </p>
+              ) : null}
             </div>
             <div style={styles.cardActions}>
               <button onClick={() => handleEdit(employee)} style={styles.editButton}>

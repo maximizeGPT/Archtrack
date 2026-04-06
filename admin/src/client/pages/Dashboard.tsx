@@ -5,11 +5,16 @@ import { useWebSocket } from '../contexts/WebSocketContext';
 import { useAuth } from '../contexts/AuthContext';
 
 import type { Employee } from '../../../shared-types';
+import { formatDurationSeconds } from '../../../shared-types';
 
-function formatDuration(hours: number): string {
-  if (hours >= 1) return `${hours.toFixed(1)}h`;
-  if (hours > 0) return `${Math.round(hours * 60)}m`;
-  return '0h';
+// Browser timezone sent to the server with every Dashboard stats request so
+// "today" is always the admin's local day, not the server's.
+function getBrowserTz(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
 }
 
 interface Activity {
@@ -39,10 +44,19 @@ interface EmployeeActivity {
 }
 
 interface DashboardStats {
+  timezone: string;
+  dayStart: string;
+  dayEnd: string;
   totalEmployees: number;
   activeProjects: number;
+  totalSecondsToday: number;
+  focusSecondsToday: number;
+  distractedSecondsToday: number;
+  productiveSecondsToday: number;
+  unproductiveSecondsToday: number;
+  neutralSecondsToday: number;
+  idleSecondsToday: number;
   totalHoursToday: number;
-  totalHoursThisWeek: number;
   productivityBreakdown: {
     coreWork: number;
     communication: number;
@@ -245,8 +259,9 @@ export const Dashboard: React.FC = () => {
   const loadData = async () => {
     try {
       setError(null);
+      const tz = encodeURIComponent(getBrowserTz());
       const [statsData, employeesData] = await Promise.all([
-        api.get('/api/dashboard/stats'),
+        api.get(`/api/dashboard/stats?tz=${tz}`),
         api.get('/api/employees')
       ]);
 
@@ -335,13 +350,13 @@ export const Dashboard: React.FC = () => {
           />
           <StatCard
             title="Focus Time Today"
-            value={formatDuration(Math.round((stats?.focusTimeMinutes || 0) / 60 * 10) / 10)}
+            value={formatDurationSeconds(stats?.focusSecondsToday ?? (stats?.focusTimeMinutes || 0) * 60)}
             icon="🎯"
             color="#27ae60"
           />
           <StatCard
             title="Idle/Wasted Time"
-            value={formatDuration(Math.round((stats?.distractedTimeMinutes || 0) / 60 * 10) / 10)}
+            value={formatDurationSeconds(stats?.distractedSecondsToday ?? (stats?.distractedTimeMinutes || 0) * 60)}
             icon="💤"
             color="#e74c3c"
           />
@@ -394,7 +409,10 @@ export const Dashboard: React.FC = () => {
                         </span>
                       </div>
                       <div style={styles.employeeMeta}>
-                        {formatDuration(empActivity.hoursToday)} today • {emp.department}
+                        {formatDurationSeconds(
+                          (empActivity as any).secondsToday ?? Math.round((empActivity.hoursToday || 0) * 3600)
+                        )}{' '}
+                        today {emp.department ? `• ${emp.department}` : ''}
                       </div>
                     </>
                   ) : (
@@ -546,14 +564,13 @@ interface BreakdownItemProps {
 }
 
 const BreakdownItem: React.FC<BreakdownItemProps> = ({ label, minutes, color }) => {
-  const hours = Math.round((minutes / 60) * 10) / 10;
   return (
     <div style={styles.breakdownItem}>
       <div style={styles.breakdownLabel}>
         <span style={{ ...styles.breakdownDot, backgroundColor: color }} />
         {label}
       </div>
-      <div style={styles.breakdownValue}>{formatDuration(hours)}</div>
+      <div style={styles.breakdownValue}>{formatDurationSeconds(minutes * 60)}</div>
     </div>
   );
 };

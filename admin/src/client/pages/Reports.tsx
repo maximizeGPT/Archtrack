@@ -1,11 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../lib/api';
 import type { Employee, Activity } from '../../../shared-types';
+import {
+  formatDurationSeconds,
+  CATEGORY_DISPLAY_NAMES,
+  CATEGORY_COLORS,
+  CANONICAL_CATEGORY_ORDER
+} from '../../../shared-types';
 
-function formatDuration(hours: number): string {
-  if (hours >= 1) return `${hours.toFixed(1)}h`;
-  if (hours > 0) return `${Math.round(hours * 60)}m`;
-  return '0h';
+function getBrowserTz(): string {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  } catch {
+    return 'UTC';
+  }
 }
 
 const SUSPICIOUS_ACTIVITIES_PER_PAGE = 10;
@@ -43,12 +51,13 @@ export const Reports: React.FC = () => {
 
   const generateReport = async () => {
     if (!selectedEmployee || !startDate || !endDate) return;
-    
+
     setLoading(true);
     setSuspiciousPage(1); // Reset pagination on new report
     try {
+      const tz = encodeURIComponent(getBrowserTz());
       const data = await api.get(
-        `/api/reports/productivity?employeeId=${selectedEmployee}&startDate=${startDate}&endDate=${endDate}`
+        `/api/reports/productivity?employeeId=${selectedEmployee}&startDate=${startDate}&endDate=${endDate}&tz=${tz}`
       );
       if (data.success) {
         setReport(data.data);
@@ -134,32 +143,96 @@ export const Reports: React.FC = () => {
         </div>
       )}
 
-      {report && (
+      {report && (() => {
+        const s = report.summary || {};
+        // Prefer the new *_Seconds fields, fall back to *_Hours * 3600 for
+        // backwards compatibility with older API responses.
+        const totalSeconds       = s.totalSeconds        ?? Math.round((s.totalHours || 0) * 3600);
+        const productiveSeconds  = s.productiveSeconds   ?? Math.round((s.productiveHours || 0) * 3600);
+        const unproductiveSeconds = s.unproductiveSeconds ?? Math.round((s.unproductiveHours || 0) * 3600);
+        const neutralSeconds     = s.neutralSeconds      ?? Math.round((s.neutralHours || 0) * 3600);
+        const idleSeconds        = s.idleSeconds         ?? Math.round((s.idleHours || 0) * 3600);
+        const outsideHoursSeconds = s.outsideHoursSeconds ?? 0;
+        const score              = s.averageProductivityScore ?? 0;
+
+        // Canonical category order, but only show categories with > 0 seconds.
+        const rawBreakdown: Record<string, number> =
+          report.categoryBreakdownSeconds ||
+          Object.fromEntries(
+            // legacy: minutes keyed by display name or canonical id
+            Object.entries(report.categoryBreakdown || {}).map(([k, v]) => [
+              k,
+              Math.round(((v as number) || 0) * 60)
+            ])
+          );
+        const orderedCategories = CANONICAL_CATEGORY_ORDER
+          .filter(id => (rawBreakdown[id] || 0) > 0)
+          .concat(
+            // include any categories from the server we don't know about
+            Object.keys(rawBreakdown).filter(k => !CANONICAL_CATEGORY_ORDER.includes(k) && (rawBreakdown[k] || 0) > 0)
+          );
+
+        return (
         <div style={styles.reportContainer}>
           <div style={styles.summaryCards}>
             <div style={styles.card}>
               <h3 style={styles.cardTitle}>Total Hours</h3>
-              <p style={styles.cardValue}>{formatDuration(report.summary.totalHours)}</p>
+              <p style={styles.cardValue}>{formatDurationSeconds(totalSeconds)}</p>
+              <p style={{ fontSize: '11px', color: '#95a5a6', margin: '4px 0 0' }}>
+                productive + idle + other
+              </p>
             </div>
             <div style={styles.card}>
               <h3 style={styles.cardTitle}>Productive Hours</h3>
               <p style={{...styles.cardValue, color: '#27ae60'}}>
-                {formatDuration(report.summary.productiveHours)}
+                {formatDurationSeconds(productiveSeconds)}
               </p>
             </div>
             <div style={styles.card}>
               <h3 style={styles.cardTitle}>Unproductive Hours</h3>
               <p style={{...styles.cardValue, color: '#e74c3c'}}>
-                {formatDuration(report.summary.unproductiveHours)}
+                {formatDurationSeconds(unproductiveSeconds)}
               </p>
             </div>
             <div style={styles.card}>
               <h3 style={styles.cardTitle}>Productivity Score</h3>
-              <p style={{...styles.cardValue, color: '#3498db'}}>
-                {report.summary.averageProductivityScore}%
+              <p style={{...styles.cardValue, color: '#3498db'}}>{score}%</p>
+              <p style={{ fontSize: '11px', color: '#95a5a6', margin: '4px 0 0' }}>
+                productive ÷ (productive + unproductive)
               </p>
             </div>
           </div>
+
+          {/* Reconciliation card — breaks down how the total was built so the
+              admin can always see the math. */}
+          <div style={{
+            ...styles.section,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+            gap: '12px'
+          }}>
+            <ReconcileCell label="Productive" seconds={productiveSeconds} color="#27ae60" />
+            <ReconcileCell label="Unproductive" seconds={unproductiveSeconds} color="#e74c3c" />
+            <ReconcileCell label="Other (neutral)" seconds={neutralSeconds} color="#bdc3c7" />
+            <ReconcileCell label="Idle / Break" seconds={idleSeconds} color="#95a5a6" />
+            <ReconcileCell label="Total" seconds={totalSeconds} color="#2c3e50" bold />
+          </div>
+
+          {/* Outside-business-hours card — only when BH are set for this employee. */}
+          {report.hasBusinessHours && outsideHoursSeconds > 0 && (
+            <div style={{
+              ...styles.section,
+              border: '1px dashed #f39c12',
+              backgroundColor: '#fffaf0'
+            }}>
+              <h3 style={styles.sectionTitle}>🕘 Outside Business Hours</h3>
+              <p style={{ fontSize: '14px', color: '#7f8c8d', margin: '0 0 8px' }}>
+                {formatDurationSeconds(outsideHoursSeconds)} was tracked outside of this employee's
+                configured working hours and is <strong>not</strong> counted in their total, productive,
+                or productivity-score numbers above.
+              </p>
+            </div>
+          )}
 
           {report.suspiciousActivities.length > 0 && (
             <div style={styles.section}>
@@ -205,21 +278,67 @@ export const Reports: React.FC = () => {
           <div style={styles.section}>
             <h3 style={styles.sectionTitle}>Category Breakdown</h3>
             <div style={styles.categoryList}>
-              {Object.entries(report.categoryBreakdown).map(([category, minutes]) => (
-                <div key={category} style={styles.categoryItem}>
-                  <span style={styles.categoryName}>{category}</span>
-                  <span style={styles.categoryValue}>
-                    {formatDuration(Math.round((minutes as number) / 60 * 10) / 10)}
-                  </span>
+              {orderedCategories.length === 0 && (
+                <div style={{ ...styles.categoryItem, justifyContent: 'center', color: '#95a5a6' }}>
+                  No categorized activity in this range.
                 </div>
-              ))}
+              )}
+              {orderedCategories.map((id) => {
+                const seconds = rawBreakdown[id] || 0;
+                const pct = totalSeconds > 0 ? Math.round((seconds / totalSeconds) * 100) : 0;
+                const color = CATEGORY_COLORS[id] || '#bdc3c7';
+                const label = CATEGORY_DISPLAY_NAMES[id] || id;
+                return (
+                  <div key={id} style={styles.categoryItem}>
+                    <span style={{
+                      ...styles.categoryName,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px'
+                    }}>
+                      <span style={{
+                        display: 'inline-block',
+                        width: '10px',
+                        height: '10px',
+                        borderRadius: '50%',
+                        backgroundColor: color
+                      }} />
+                      {label}
+                    </span>
+                    <span style={styles.categoryValue}>
+                      {formatDurationSeconds(seconds)}{' '}
+                      <span style={{ color: '#95a5a6', fontWeight: 400, marginLeft: '6px' }}>
+                        {pct}%
+                      </span>
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 };
+
+// Small cell used in the reconciliation grid.
+const ReconcileCell: React.FC<{ label: string; seconds: number; color: string; bold?: boolean }> = ({ label, seconds, color, bold }) => (
+  <div style={{
+    padding: '10px 12px',
+    backgroundColor: '#f8f9fa',
+    borderLeft: `3px solid ${color}`,
+    borderRadius: '6px'
+  }}>
+    <div style={{ fontSize: '11px', textTransform: 'uppercase', color: '#7f8c8d', letterSpacing: '0.5px' }}>
+      {label}
+    </div>
+    <div style={{ fontSize: '18px', fontWeight: bold ? 700 : 600, color: '#2c3e50', marginTop: '2px' }}>
+      {formatDurationSeconds(seconds)}
+    </div>
+  </div>
+);
 
 const styles: { [key: string]: React.CSSProperties } = {
   container: {
