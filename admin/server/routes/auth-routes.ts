@@ -19,7 +19,7 @@ export function setupAuthRoutes(app: Express): void {
   // Sign up: create org + owner account
   app.post('/api/auth/signup', async (req, res) => {
     try {
-      const { email, password, name, orgName } = req.body;
+      const { email, password, name, orgName, timezone } = req.body;
 
       if (!email || !password || !name || !orgName) {
         return res.status(400).json({ success: false, error: 'email, password, name, and orgName are required' });
@@ -44,11 +44,20 @@ export function setupAuthRoutes(app: Express): void {
       const existingSlug = await db().get('SELECT id FROM organizations WHERE slug = ?', [slug]);
       const finalSlug = existingSlug ? `${slug}-${uuidv4().slice(0, 4)}` : slug;
 
+      // Validate + default the org timezone from the signup form.
+      let orgTz = 'UTC';
+      if (typeof timezone === 'string') {
+        try {
+          new Intl.DateTimeFormat('en-US', { timeZone: timezone });
+          orgTz = timezone;
+        } catch { /* ignore invalid tz, keep UTC */ }
+      }
+
       // Create org
       await db().run(
-        `INSERT INTO organizations (id, name, slug, owner_email, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [orgId, orgName, finalSlug, email, now, now]
+        `INSERT INTO organizations (id, name, slug, owner_email, timezone, default_currency, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [orgId, orgName, finalSlug, email, orgTz, 'USD', now, now]
       );
 
       // Create user
@@ -76,7 +85,14 @@ export function setupAuthRoutes(app: Express): void {
           accessToken,
           refreshToken,
           user: { id: userId, email, name, role: 'owner' },
-          org: { id: orgId, name: orgName, slug: finalSlug }
+          org: {
+            id: orgId,
+            name: orgName,
+            slug: finalSlug,
+            timezone: orgTz,
+            logoUrl: null,
+            defaultCurrency: 'USD'
+          }
         }
       });
     } catch (error) {
@@ -94,7 +110,9 @@ export function setupAuthRoutes(app: Express): void {
       }
 
       const user = await db().get(
-        `SELECT u.*, o.name as org_name, o.slug as org_slug
+        `SELECT u.*, o.name as org_name, o.slug as org_slug,
+                o.timezone as org_timezone, o.logo_url as org_logo_url,
+                o.default_currency as org_default_currency
          FROM users u JOIN organizations o ON u.org_id = o.id
          WHERE u.email = ?`,
         [email]
@@ -126,7 +144,14 @@ export function setupAuthRoutes(app: Express): void {
           accessToken,
           refreshToken,
           user: { id: user.id, email: user.email, name: user.name, role: user.role },
-          org: { id: user.org_id, name: user.org_name, slug: user.org_slug }
+          org: {
+            id: user.org_id,
+            name: user.org_name,
+            slug: user.org_slug,
+            timezone: user.org_timezone || 'UTC',
+            logoUrl: user.org_logo_url || null,
+            defaultCurrency: user.org_default_currency || 'USD'
+          }
         }
       });
     } catch (error) {
@@ -180,13 +205,30 @@ export function setupAuthRoutes(app: Express): void {
     try {
       if (req.tokenType === 'dashboard') {
         const user = await db().get(
-          `SELECT u.id, u.email, u.name, u.role, u.org_id, o.name as org_name, o.slug as org_slug
+          `SELECT u.id, u.email, u.name, u.role, u.org_id,
+                  o.name as org_name, o.slug as org_slug,
+                  o.timezone as org_timezone, o.logo_url as org_logo_url,
+                  o.default_currency as org_default_currency
            FROM users u JOIN organizations o ON u.org_id = o.id
            WHERE u.id = ?`,
           [req.userId]
         );
         if (!user) return res.status(404).json({ success: false, error: 'User not found' });
-        res.json({ success: true, data: { type: 'dashboard', user, org: { id: user.org_id, name: user.org_name, slug: user.org_slug } } });
+        res.json({
+          success: true,
+          data: {
+            type: 'dashboard',
+            user: { id: user.id, email: user.email, name: user.name, role: user.role },
+            org: {
+              id: user.org_id,
+              name: user.org_name,
+              slug: user.org_slug,
+              timezone: user.org_timezone || 'UTC',
+              logoUrl: user.org_logo_url || null,
+              defaultCurrency: user.org_default_currency || 'USD'
+            }
+          }
+        });
       } else if (req.tokenType === 'device') {
         const employee = await db().get('SELECT * FROM employees WHERE id = ? AND org_id = ?', [req.employeeId, req.orgId]);
         if (!employee) return res.status(404).json({ success: false, error: 'Employee not found' });

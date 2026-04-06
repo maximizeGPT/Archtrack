@@ -104,6 +104,46 @@ export async function runMigrations(db: DB): Promise<void> {
 
         console.log('  Migration 1: Multi-tenancy schema applied, existing data backfilled to org-default');
       }
+    },
+    {
+      version: 2,
+      name: 'branding + internationalization + business hours',
+      up: async (db: DB) => {
+        // --- organizations: logo + default timezone + default currency
+        const orgCols = await db.all(`PRAGMA table_info(organizations)`);
+        const orgColNames = new Set(orgCols.map((c: any) => c.name));
+        if (!orgColNames.has('timezone')) {
+          await db.exec(`ALTER TABLE organizations ADD COLUMN timezone TEXT DEFAULT 'UTC'`);
+        }
+        if (!orgColNames.has('logo_url')) {
+          await db.exec(`ALTER TABLE organizations ADD COLUMN logo_url TEXT`);
+        }
+        if (!orgColNames.has('default_currency')) {
+          await db.exec(`ALTER TABLE organizations ADD COLUMN default_currency TEXT DEFAULT 'USD'`);
+        }
+
+        // --- employees: currency + timezone override + business hours
+        const empCols = await db.all(`PRAGMA table_info(employees)`);
+        const empColNames = new Set(empCols.map((c: any) => c.name));
+        if (!empColNames.has('currency')) {
+          await db.exec(`ALTER TABLE employees ADD COLUMN currency TEXT`);
+        }
+        if (!empColNames.has('timezone')) {
+          await db.exec(`ALTER TABLE employees ADD COLUMN timezone TEXT`);
+        }
+        if (!empColNames.has('business_hours_start')) {
+          await db.exec(`ALTER TABLE employees ADD COLUMN business_hours_start TEXT`);
+        }
+        if (!empColNames.has('business_hours_end')) {
+          await db.exec(`ALTER TABLE employees ADD COLUMN business_hours_end TEXT`);
+        }
+        if (!empColNames.has('business_hours_days')) {
+          // Comma-separated ISO day-of-week: 1=Mon..7=Sun. e.g. "1,2,3,4,5"
+          await db.exec(`ALTER TABLE employees ADD COLUMN business_hours_days TEXT`);
+        }
+
+        console.log('  Migration 2: Org branding + currency + timezone + business hours columns added');
+      }
     }
   ];
 

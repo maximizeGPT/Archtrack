@@ -4,7 +4,10 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import type { Employee, Project, Task, TimeEntry, Activity, ProductivityReport } from '../shared-types.js';
+import { computeProductivityStats } from '../shared-types.js';
 import { runMigrations } from './migrations.js';
+import { getLocalDayBounds, resolveTimezone } from './timezone.js';
+import { annotateOutsideHours, hasBusinessHours } from './business-hours.js';
 
 // ES module compatibility
 const __filename = fileURLToPath(import.meta.url);
@@ -235,9 +238,18 @@ export async function getEmployeeById(orgId: string, id: string): Promise<Employ
 export async function createEmployee(employee: Employee): Promise<void> {
   const db = getDatabase();
   await db.run(
-    `INSERT INTO employees (id, org_id, name, email, role, department, hourly_rate, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [employee.id, employee.orgId, employee.name, employee.email, employee.role, employee.department, employee.hourlyRate, employee.createdAt, employee.updatedAt]
+    `INSERT INTO employees (
+      id, org_id, name, email, role, department, hourly_rate,
+      currency, timezone, business_hours_start, business_hours_end, business_hours_days,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      employee.id, employee.orgId, employee.name, employee.email, employee.role,
+      employee.department || null, employee.hourlyRate ?? null,
+      employee.currency || null, employee.timezone || null,
+      employee.businessHoursStart || null, employee.businessHoursEnd || null, employee.businessHoursDays || null,
+      employee.createdAt, employee.updatedAt
+    ]
   );
 }
 
@@ -251,8 +263,13 @@ export async function updateEmployee(orgId: string, id: string, updates: Partial
   if (updates.name) { sets.push('name = ?'); values.push(updates.name); }
   if (updates.email) { sets.push('email = ?'); values.push(updates.email); }
   if (updates.role) { sets.push('role = ?'); values.push(updates.role); }
-  if (updates.department) { sets.push('department = ?'); values.push(updates.department); }
+  if (updates.department !== undefined) { sets.push('department = ?'); values.push(updates.department || null); }
   if (updates.hourlyRate !== undefined) { sets.push('hourly_rate = ?'); values.push(updates.hourlyRate); }
+  if (updates.currency !== undefined) { sets.push('currency = ?'); values.push(updates.currency || null); }
+  if (updates.timezone !== undefined) { sets.push('timezone = ?'); values.push(updates.timezone || null); }
+  if (updates.businessHoursStart !== undefined) { sets.push('business_hours_start = ?'); values.push(updates.businessHoursStart || null); }
+  if (updates.businessHoursEnd !== undefined) { sets.push('business_hours_end = ?'); values.push(updates.businessHoursEnd || null); }
+  if (updates.businessHoursDays !== undefined) { sets.push('business_hours_days = ?'); values.push(updates.businessHoursDays || null); }
 
   sets.push('updated_at = ?'); values.push(now);
   values.push(id);
@@ -274,6 +291,11 @@ function mapEmployee(row: any): Employee {
     role: row.role,
     department: row.department,
     hourlyRate: row.hourly_rate,
+    currency: row.currency || undefined,
+    timezone: row.timezone || undefined,
+    businessHoursStart: row.business_hours_start || undefined,
+    businessHoursEnd: row.business_hours_end || undefined,
+    businessHoursDays: row.business_hours_days || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -678,21 +700,40 @@ function mapTimeEntry(row: any): TimeEntry {
   };
 }
 
-// Dashboard stats with timeout protection
-export async function getDashboardStats(orgId: string): Promise<any> {
+// ---------------------------------------------------------------------------
+// Dashboard stats — unified productivity formula + timezone-aware "today".
+// ---------------------------------------------------------------------------
+// The caller may pass an explicit `viewTimezone` (usually the admin browser's
+// IANA zone, detected with `Intl.DateTimeFormat().resolvedOptions().timeZone`).
+// When absent we fall back to the organization's stored timezone, and if that
+// is also unset we fall back to UTC.
+//
+// All "today" queries use `[startUtc, endUtc)` day boundaries computed in the
+// resolved tz so that a PST admin refreshing at 11:55pm still sees *their*
+// day, not UTC's.
+
+const SYSTEM_APP_BLACKLIST = [
+  'loginwindow',
+  'lockscreen',
+  'screensaver',
+  'window server',
+  'idle',
+  'usernotificationcenter',
+  'controlcenter',
+  'dock',
+  'notificationcenter'
+];
+
+export async function getDashboardStats(
+  orgId: string,
+  viewTimezone?: string
+): Promise<any> {
   const db = getDatabase();
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString();
-
-  const weekAgo = new Date(today);
-  weekAgo.setDate(weekAgo.getDate() - 7);
-  const weekAgoStr = weekAgo.toISOString();
-
-  const monthAgo = new Date(today);
-  monthAgo.setMonth(monthAgo.getMonth() - 1);
-  const monthAgoStr = monthAgo.toISOString();
+  // Resolve the timezone the admin wants to see "today" in.
+  const orgRow = await db.get('SELECT timezone FROM organizations WHERE id = ?', [orgId]);
+  const tz = resolveTimezone(viewTimezone || orgRow?.timezone);
+  const [startTodayUtc, endTodayUtc] = getLocalDayBounds(tz, 0);
 
   const withTimeout = <T>(promise: Promise<T>, ms: number, defaultValue: T): Promise<T> => {
     return Promise.race([
@@ -706,152 +747,160 @@ export async function getDashboardStats(orgId: string): Promise<any> {
     });
   };
 
-  const [totalEmployees, activeProjects, todayHours, weekHours, monthHours, recentActivities, suspiciousCount, productivityStats] = await Promise.all([
+  // Build the system-app exclusion fragment for the activity feed.
+  const feedExclusion = SYSTEM_APP_BLACKLIST.map(() => 'LOWER(app_name) != ?').join(' AND ');
+  const feedParams: any[] = [orgId, ...SYSTEM_APP_BLACKLIST];
+
+  const [
+    totalEmployees,
+    activeProjects,
+    todayActivities,
+    recentActivities,
+    suspiciousCount
+  ] = await Promise.all([
     withTimeout(db.get('SELECT COUNT(*) as count FROM employees WHERE is_active = 1 AND org_id = ?', [orgId]), 5000, { count: 0 }),
     withTimeout(db.get('SELECT COUNT(*) as count FROM projects WHERE status = "active" AND org_id = ?', [orgId]), 5000, { count: 0 }),
-    withTimeout(db.get('SELECT COALESCE(SUM(duration_seconds), 0) as total FROM activities WHERE timestamp >= ? AND org_id = ?', [todayStr, orgId]), 5000, { total: 0 }),
-    withTimeout(db.get('SELECT COALESCE(SUM(duration_seconds), 0) as total FROM activities WHERE timestamp >= ? AND org_id = ?', [weekAgoStr, orgId]), 5000, { total: 0 }),
-    withTimeout(db.get('SELECT COALESCE(SUM(duration_seconds), 0) as total FROM activities WHERE timestamp >= ? AND org_id = ?', [monthAgoStr, orgId]), 5000, { total: 0 }),
-    withTimeout(db.all('SELECT * FROM activities WHERE org_id = ? ORDER BY timestamp DESC LIMIT 20', [orgId]), 5000, []),
-    withTimeout(db.get('SELECT COUNT(*) as count FROM activities WHERE timestamp >= ? AND is_suspicious = 1 AND org_id = ?', [todayStr, orgId]), 5000, { count: 0 }),
-    withTimeout(db.all(`
-      SELECT category, SUM(duration_seconds) as total_seconds
-      FROM activities
-      WHERE timestamp >= ? AND org_id = ?
-      GROUP BY category
-    `, [todayStr, orgId]), 5000, [])
+    withTimeout(
+      db.all(
+        `SELECT * FROM activities
+          WHERE org_id = ? AND timestamp >= ? AND timestamp < ?`,
+        [orgId, startTodayUtc, endTodayUtc]
+      ),
+      5000,
+      []
+    ),
+    withTimeout(
+      db.all(
+        `SELECT * FROM activities
+          WHERE org_id = ? AND ${feedExclusion}
+          ORDER BY timestamp DESC, created_at DESC
+          LIMIT 20`,
+        feedParams
+      ),
+      5000,
+      []
+    ),
+    withTimeout(
+      db.get(
+        `SELECT COUNT(*) as count FROM activities
+          WHERE timestamp >= ? AND timestamp < ?
+            AND is_suspicious = 1 AND org_id = ?`,
+        [startTodayUtc, endTodayUtc, orgId]
+      ),
+      5000,
+      { count: 0 }
+    )
   ]);
 
-  // Build productivity breakdown with new universal categories
-  const productivityBreakdown: Record<string, number> = {
-    coreWork: 0,
-    communication: 0,
-    researchLearning: 0,
-    planningDocs: 0,
-    breakIdle: 0,
-    entertainment: 0,
-    socialMedia: 0,
-    shoppingPersonal: 0,
-    other: 0
+  // Compute unified stats across the whole org for today.
+  const mappedToday = (todayActivities as any[]).map(mapActivity);
+  const stats = computeProductivityStats(mappedToday);
+
+  // Minutes per bucket for the dashboard's "Time Breakdown (Today)" grid.
+  const minutes = (sec: number) => Math.round(sec / 60);
+  const productivityBreakdown = {
+    coreWork:         minutes(stats.categorySeconds.core_work || 0),
+    communication:    minutes(stats.categorySeconds.communication || 0),
+    researchLearning: minutes(stats.categorySeconds.research_learning || 0),
+    planningDocs:     minutes(stats.categorySeconds.planning_docs || 0),
+    breakIdle:        minutes(stats.categorySeconds.break_idle || 0),
+    entertainment:    minutes(stats.categorySeconds.entertainment || 0),
+    socialMedia:      minutes(stats.categorySeconds.social_media || 0),
+    shoppingPersonal: minutes(stats.categorySeconds.shopping_personal || 0),
+    other:            minutes(stats.categorySeconds.other || 0)
   };
 
-  for (const stat of productivityStats) {
-    const minutes = Math.round(stat.total_seconds / 60);
-    switch (stat.category) {
-      case 'core_work':
-        productivityBreakdown.coreWork += minutes;
-        break;
-      case 'communication':
-        productivityBreakdown.communication += minutes;
-        break;
-      case 'research_learning':
-        productivityBreakdown.researchLearning += minutes;
-        break;
-      case 'planning_docs':
-        productivityBreakdown.planningDocs += minutes;
-        break;
-      case 'break_idle':
-        productivityBreakdown.breakIdle += minutes;
-        break;
-      case 'entertainment':
-        productivityBreakdown.entertainment += minutes;
-        break;
-      case 'social_media':
-        productivityBreakdown.socialMedia += minutes;
-        break;
-      case 'shopping_personal':
-        productivityBreakdown.shoppingPersonal += minutes;
-        break;
-      default:
-        productivityBreakdown.other += minutes;
-    }
-  }
-
-  const avgScore = await withTimeout(
-    db.get('SELECT AVG(productivity_score) as score FROM activities WHERE timestamp >= ? AND org_id = ?', [todayStr, orgId]),
-    5000,
-    { score: 0 }
-  );
-
-  const focusTime = await withTimeout(
-    db.get(`SELECT COALESCE(SUM(duration_seconds), 0) as total
-     FROM activities
-     WHERE timestamp >= ? AND productivity_level = 'productive' AND is_suspicious = 0 AND org_id = ?`, [todayStr, orgId]),
-    5000,
-    { total: 0 }
-  );
-
-  const distractedTime = await withTimeout(
-    db.get(`SELECT COALESCE(SUM(duration_seconds), 0) as total
-     FROM activities
-     WHERE timestamp >= ? AND (productivity_level = 'unproductive' OR is_suspicious = 1) AND org_id = ?`, [todayStr, orgId]),
-    5000,
-    { total: 0 }
-  );
-
   const employeeActivity = await withTimeout(
-    getEmployeeActivityStats(orgId),
+    getEmployeeActivityStats(orgId, tz),
     5000,
     []
   );
 
   return {
+    timezone: tz,
+    dayStart: startTodayUtc,
+    dayEnd: endTodayUtc,
     totalEmployees: totalEmployees.count,
     activeProjects: activeProjects.count,
-    totalHoursToday: Math.round(todayHours.total / 3600 * 10) / 10,
-    totalHoursThisWeek: Math.round(weekHours.total / 3600 * 10) / 10,
-    totalHoursThisMonth: Math.round(monthHours.total / 3600 * 10) / 10,
+    // All duration-carrying fields exposed as both seconds (source of truth)
+    // and the legacy hours/minutes values (kept so older clients still work).
+    totalSecondsToday:       stats.totalSeconds,
+    focusSecondsToday:       stats.productiveSeconds,
+    distractedSecondsToday:  stats.unproductiveSeconds + stats.idleSeconds,
+    productiveSecondsToday:  stats.productiveSeconds,
+    unproductiveSecondsToday: stats.unproductiveSeconds,
+    neutralSecondsToday:     stats.neutralSeconds,
+    idleSecondsToday:        stats.idleSeconds,
+    totalHoursToday:         Math.round(stats.totalSeconds / 3600 * 10) / 10,
+    focusTimeMinutes:        Math.round(stats.productiveSeconds / 60),
+    distractedTimeMinutes:   Math.round((stats.unproductiveSeconds + stats.idleSeconds) / 60),
     productivityBreakdown,
-    averageProductivityScore: Math.round(avgScore?.score || 0),
+    averageProductivityScore: stats.productivityScore,
     suspiciousActivityCount: suspiciousCount.count,
-    focusTimeMinutes: Math.round(focusTime.total / 60),
-    distractedTimeMinutes: Math.round(distractedTime.total / 60),
-    recentActivities: recentActivities.map(mapActivity),
+    recentActivities: (recentActivities as any[]).map(mapActivity),
     employeeActivity
   };
 }
 
-// Get employee activity with productivity metrics
-export async function getEmployeeActivityStats(orgId: string): Promise<any[]> {
+// Get employee activity with unified productivity metrics.
+// Uses the same formula as Reports so the dashboard card and the report agree.
+export async function getEmployeeActivityStats(orgId: string, tz?: string): Promise<any[]> {
   const db = getDatabase();
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString();
+  const orgRow = await db.get('SELECT timezone FROM organizations WHERE id = ?', [orgId]);
+  const resolvedTz = resolveTimezone(tz || orgRow?.timezone);
+  const [startTodayUtc, endTodayUtc] = getLocalDayBounds(resolvedTz, 0);
 
-  const employees = await db.all('SELECT id, name FROM employees WHERE is_active = 1 AND org_id = ?', [orgId]);
-  
+  const employees = await db.all(
+    `SELECT id, name, timezone, business_hours_start, business_hours_end, business_hours_days
+     FROM employees
+     WHERE is_active = 1 AND org_id = ?`,
+    [orgId]
+  );
+
   const results = [];
   for (const emp of employees) {
-    const [latestActivity, todayStats, suspiciousCount] = await Promise.all([
+    // Use the employee's own timezone for their "today" if set, else org tz.
+    const empTz = resolveTimezone(emp.timezone || resolvedTz);
+    const [empStart, empEnd] = getLocalDayBounds(empTz, 0);
+
+    const [latestActivity, todayRows, suspiciousCount] = await Promise.all([
       db.get(
-        'SELECT * FROM activities WHERE employee_id = ? ORDER BY timestamp DESC LIMIT 1',
+        'SELECT * FROM activities WHERE employee_id = ? ORDER BY timestamp DESC, created_at DESC LIMIT 1',
         emp.id
       ),
-      db.get(
-        `SELECT 
-          COALESCE(SUM(duration_seconds), 0) as total_seconds,
-          AVG(productivity_score) as avg_score
-         FROM activities 
-         WHERE employee_id = ? AND timestamp >= ?`,
-        [emp.id, todayStr]
+      db.all(
+        `SELECT * FROM activities
+          WHERE employee_id = ? AND timestamp >= ? AND timestamp < ?`,
+        [emp.id, empStart, empEnd]
       ),
       db.get(
-        'SELECT COUNT(*) as count FROM activities WHERE employee_id = ? AND timestamp >= ? AND is_suspicious = 1',
-        [emp.id, todayStr]
+        `SELECT COUNT(*) as count FROM activities
+          WHERE employee_id = ? AND timestamp >= ? AND timestamp < ? AND is_suspicious = 1`,
+        [emp.id, empStart, empEnd]
       )
     ]);
-    
+
+    const mapped = (todayRows as any[]).map(mapActivity);
+    const annotated = hasBusinessHours(emp)
+      ? annotateOutsideHours(mapped, emp, resolvedTz)
+      : mapped.map(a => ({ ...a, outsideBusinessHours: false }));
+    const stats = computeProductivityStats(annotated);
+
     results.push({
       employeeId: emp.id,
       employeeName: emp.name,
       currentActivity: latestActivity?.window_title,
       currentCategory: latestActivity?.category_name,
-      productivityScore: Math.round(todayStats?.avg_score || 0),
-      hoursToday: Math.round((todayStats?.total_seconds || 0) / 3600 * 10) / 10,
-      suspiciousActivityCount: suspiciousCount?.count || 0
+      productivityScore: stats.productivityScore,
+      hoursToday: Math.round(stats.totalSeconds / 3600 * 10) / 10,
+      secondsToday: stats.totalSeconds,
+      suspiciousActivityCount: suspiciousCount?.count || 0,
+      isIdle: latestActivity?.is_idle === 1,
+      hasBusinessHours: hasBusinessHours(emp),
+      outsideHoursSeconds: stats.outsideHoursSeconds
     });
   }
-  
+
   return results;
 }

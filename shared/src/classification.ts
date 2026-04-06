@@ -518,3 +518,152 @@ export function generateDailySummary(
     warnings
   };
 }
+
+// ===========================================================================
+// Unified productivity statistics — single source of truth
+// ---------------------------------------------------------------------------
+// Used by BOTH the Dashboard stats endpoint and the Reports endpoint so the
+// numbers always reconcile and the score formula is consistent across pages.
+//
+// Formula (approved 2026-04-06):
+//   productivityScore = productiveSeconds / (productiveSeconds + unproductiveSeconds) * 100
+//
+// Rationale:
+//   - Excluding `neutral` (e.g. "Other" such as the admin browsing their own
+//     dashboard) prevents legitimate-but-unclassified time from dragging the
+//     score down.
+//   - Excluding `idle` / `break_idle` prevents lunch breaks and AFK time
+//     from distorting the numerator or denominator.
+//   - All buckets (productive + unproductive + neutral + idle + outsideHours)
+//     are still tracked and exposed separately so Reports can show a full
+//     reconcilable breakdown that sums to the total.
+// ===========================================================================
+
+export interface ProductivityStats {
+  // Seconds in each bucket (integers)
+  totalSeconds: number;          // sum of all activity seconds IN the counted window
+  productiveSeconds: number;     // core_work + communication + research + planning_docs (non-idle)
+  unproductiveSeconds: number;   // entertainment + social_media + shopping_personal (non-idle)
+  neutralSeconds: number;        // "other" (non-idle)
+  idleSeconds: number;           // break_idle OR isIdle=1 activities
+  outsideHoursSeconds: number;   // activities dropped by business-hours filter (0 if no BH set)
+  // Category → seconds map keyed by canonical category id (core_work, ...)
+  categorySeconds: Record<string, number>;
+  // 0–100 integer, (productive / (productive + unproductive)) * 100, rounded
+  productivityScore: number;
+}
+
+export interface ProductivityActivityLike {
+  category?: string | null;           // canonical id, e.g. "core_work"
+  categoryName?: string | null;       // display name, e.g. "Core Work"
+  productivityLevel?: string | null;  // 'productive' | 'unproductive' | 'neutral' | 'idle'
+  isIdle?: boolean | number | null;
+  durationSeconds?: number | null;
+  outsideBusinessHours?: boolean;     // set by business-hours filter upstream
+}
+
+/**
+ * Compute unified productivity statistics from a list of activities.
+ * All activities with `outsideBusinessHours === true` are counted into
+ * `outsideHoursSeconds` ONLY and are excluded from every other bucket
+ * (including totalSeconds) so "Total Hours" reflects the employee's
+ * working time, not their wall-clock tracker uptime.
+ */
+export function computeProductivityStats(
+  activities: ProductivityActivityLike[]
+): ProductivityStats {
+  let productive = 0;
+  let unproductive = 0;
+  let neutral = 0;
+  let idle = 0;
+  let outside = 0;
+  const categorySeconds: Record<string, number> = {};
+
+  for (const a of activities) {
+    const dur = Math.max(0, Math.floor(a.durationSeconds || 0));
+    if (dur === 0) continue;
+
+    if (a.outsideBusinessHours) {
+      outside += dur;
+      continue;
+    }
+
+    const cat = a.category || 'other';
+    categorySeconds[cat] = (categorySeconds[cat] || 0) + dur;
+
+    const isIdleRow = a.isIdle === true || a.isIdle === 1 || a.productivityLevel === 'idle';
+    if (isIdleRow) {
+      idle += dur;
+      continue;
+    }
+
+    switch (a.productivityLevel) {
+      case 'productive':
+        productive += dur;
+        break;
+      case 'unproductive':
+        unproductive += dur;
+        break;
+      case 'neutral':
+      default:
+        neutral += dur;
+        break;
+    }
+  }
+
+  const active = productive + unproductive;
+  const score = active > 0 ? Math.round((productive / active) * 100) : 0;
+
+  return {
+    totalSeconds: productive + unproductive + neutral + idle,
+    productiveSeconds: productive,
+    unproductiveSeconds: unproductive,
+    neutralSeconds: neutral,
+    idleSeconds: idle,
+    outsideHoursSeconds: outside,
+    categorySeconds,
+    productivityScore: score
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Precise duration formatter
+// ---------------------------------------------------------------------------
+// Replaces the old `formatDuration(hours)` helper that rounded 57 min -> "1.0h".
+// Input is SECONDS (integer).
+//
+//   <  60s  → "<1m"
+//   <  60m  → "42m"
+//   < 10h   → "1h 23m"   (honest: won't round 57m up to 1.0h)
+//   ≥ 10h   → "12.3h"
+// ---------------------------------------------------------------------------
+export function formatDurationSeconds(seconds: number): string {
+  const s = Math.max(0, Math.round(seconds || 0));
+  if (s === 0) return '0';
+  if (s < 60) return '<1m';
+  const totalMinutes = Math.round(s / 60);
+  if (totalMinutes < 60) return `${totalMinutes}m`;
+  const hours = totalMinutes / 60;
+  if (hours < 10) {
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    return m === 0 ? `${h}h` : `${h}h ${m}m`;
+  }
+  return `${(Math.round(hours * 10) / 10).toFixed(1)}h`;
+}
+
+// ---------------------------------------------------------------------------
+// Canonical ID → display name (for rendering the full breakdown)
+// ---------------------------------------------------------------------------
+export const CANONICAL_CATEGORY_IDS: ActivityCategory[] = [
+  'core_work',
+  'communication',
+  'research_learning',
+  'planning_docs',
+  'break_idle',
+  'other',
+  'entertainment',
+  'social_media',
+  'shopping_personal'
+];
+
