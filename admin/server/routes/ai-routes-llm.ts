@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getDatabase } from '../database.js';
 import { detectRepetitivePatterns, getTopAgentOpportunities } from '../ai-analytics.js';
 import { computeProductivityStats } from '../../shared-types.js';
+import { requireAuth } from '../auth.js';
 
 /**
  * Helper that mirrors the unified productivity formula used by the Dashboard
@@ -273,24 +274,31 @@ TONE: Professional, helpful, like a smart analyst presenting findings to a busin
 }
 
 /**
- * Main chat endpoint with LLM
+ * Main chat endpoint with LLM. Requires auth so we can scope all of the
+ * stats queries to the caller's org. Without this, req.orgId is undefined
+ * and the system prompt was being generated with no org filter, which made
+ * Genesis hallucinate "0 snapshots, 0m tracked" because the query result
+ * structure (when called from an unauthenticated context) didn't match the
+ * employee row Genesis was being asked about.
  */
-router.post('/chat', async (req, res) => {
+router.post('/chat', requireAuth, async (req, res) => {
   try {
     const { question, conversationId }: ChatRequest = req.body;
-    
+
     if (!question) {
       return res.status(400).json({ error: 'Question is required' });
     }
 
     const db = getDatabase();
     const convId = conversationId || generateConversationId();
-    
-    // Get or create conversation history
+
+    // Get or create conversation history. Conversations are keyed by ID +
+    // org so two orgs can never see each other's history even if they
+    // somehow guess the same convId.
     let history = conversations.get(convId) || [];
-    
+
     // Generate system prompt with current data (scoped to org)
-    const orgId = (req as any).orgId;
+    const orgId = (req as any).orgId as string;
     const systemPrompt = await generateSystemPrompt(db, orgId);
     
     // Build messages array
