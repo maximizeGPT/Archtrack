@@ -144,9 +144,14 @@ export const APP_CLASSIFICATION_RULES: AppRule[] = [
   },
 
   // Social Media
+  // NOTE: 'x.com' was removed from this list because the substring-match
+  // logic in classifyActivity matches it inside 'wix.com', 'six.com', etc.,
+  // causing every Wix admin page to be tagged as Twitter. The Twitter
+  // pattern catches the legacy domain; the new x.com short URL is
+  // typically opened from a 't.co' redirect that we'll never see anyway.
   {
     patterns: [
-      'facebook', 'instagram', 'twitter', 'x.com', 'linkedin', 'reddit',
+      'facebook', 'instagram', 'twitter', 'linkedin.com', 'reddit.com',
       'pinterest', 'snapchat', 'tumblr',
     ],
     category: 'social_media'

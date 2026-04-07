@@ -303,8 +303,27 @@ export function fixActivityClassification(input: ClassifierFixerInput): Classifi
   // 1. Drop system noise.
   if (isSystemProcess(appName)) return null;
 
-  // 2. If the desktop tracker already labelled it as something other than
-  //    "other", trust that label — those rules already passed.
+  // 2a. RESCUE PATH for desktop-tracker false positives:
+  //     The shared classifier in shared/src/classification.ts used to have
+  //     `x.com` in the social_media pattern list, which substring-matched
+  //     `wix.com`, `six.com`, etc. Every Wix admin page therefore got
+  //     tagged as social media. Trackers built before that fix is shipped
+  //     locally will keep sending these mislabels. Catch them here and
+  //     reclassify by checking for any work indicator in the title.
+  if (input.category === 'social_media' && BROWSER_PROCESS_NAMES.some(b => lowerApp.includes(b))) {
+    if (matchesAny(windowTitle, BROWSER_WORK_INDICATORS)) {
+      return reclassifyTo('core_work');
+    }
+    // Also: if the title has 'wix' anywhere it's basically always work for
+    // a small business owner (the only social_media false-positive case
+    // we've actually seen). Cheap targeted check.
+    if (windowTitle.toLowerCase().includes('wix')) {
+      return reclassifyTo('core_work');
+    }
+  }
+
+  // 2b. If the desktop tracker already labelled it as something other than
+  //     "other" or false-positive social_media, trust that label.
   if (input.category && input.category !== 'other') {
     return {
       category: input.category,
