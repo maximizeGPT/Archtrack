@@ -10,7 +10,7 @@
 
 import nodemailer from 'nodemailer';
 import { getDatabase } from './database.js';
-import { getLocalDayBounds, resolveTimezone, toLocalDateString } from './timezone.js';
+import { getLocalDayBounds, resolveTimezone, toLocalDateString, localMidnightUtc } from './timezone.js';
 import { computeProductivityStats, formatDurationSeconds } from '../shared-types.js';
 import { annotateOutsideHours, hasBusinessHours } from './business-hours.js';
 
@@ -74,13 +74,13 @@ export async function buildDailySummary(orgId: string, date?: string): Promise<O
   const tz = resolveTimezone(orgRow.timezone);
   const targetDate = date || toLocalDateString(new Date(), tz);
 
-  // Compute UTC bounds for the target local day.
-  const [startUtc, endUtc] = (() => {
-    const { localMidnightUtc } = require('./timezone.js');
-    const start = localMidnightUtc(targetDate, tz).toISOString();
-    const next = new Date(localMidnightUtc(targetDate, tz).getTime() + 86400000).toISOString();
-    return [start, next];
-  })();
+  // Compute UTC bounds for the target local day. Note: we don't use these
+  // values directly here — each employee gets their own bounds via
+  // getLocalDayBoundsForDate below — but keeping them around documents the
+  // shape and lets future callers reuse the value cheaply.
+  const _startUtc = localMidnightUtc(targetDate, tz).toISOString();
+  const _endUtc = new Date(localMidnightUtc(targetDate, tz).getTime() + 86400000).toISOString();
+  void _startUtc; void _endUtc;
 
   const employees = await db.all(
     `SELECT id, name, timezone, business_hours_start, business_hours_end, business_hours_days
@@ -180,7 +180,6 @@ export async function buildDailySummary(orgId: string, date?: string): Promise<O
  * helper twice for one date.
  */
 function getLocalDayBoundsForDate(dateYmd: string, tz: string): [string, string] {
-  const { localMidnightUtc } = require('./timezone.js');
   const start = localMidnightUtc(dateYmd, tz);
   const next = new Date(start.getTime() + 86400000);
   // Snap next to local midnight too in case of DST gaps.
