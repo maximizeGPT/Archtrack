@@ -15,6 +15,7 @@ import { setupAuthRoutes } from './routes/auth-routes.js';
 import { setupOrgRoutes } from './routes/org-routes.js';
 import { setupSummaryScreenshotRoutes } from './routes/summary-screenshot-routes.js';
 import { startDailySummaryScheduler } from './daily-summary.js';
+import { startScreenshotRetentionScheduler } from './screenshot-retention.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -144,6 +145,9 @@ async function startServer() {
     
     // Step 4b: Start daily summary scheduler (1-min tick).
     startDailySummaryScheduler();
+
+    // Step 4c: Start screenshot retention scheduler (hourly tick, 30d default).
+    startScreenshotRetentionScheduler();
 
     // Step 5: Start listening
     server.listen(PORT, () => {

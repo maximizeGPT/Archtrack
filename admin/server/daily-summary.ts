@@ -356,7 +356,10 @@ export async function sendDailySummaryEmail(orgId: string, date?: string): Promi
     if (err === null) {
       await db.run(
         `UPDATE organizations SET daily_summary_last_sent_date = ?, updated_at = ? WHERE id = ?`,
-        [summary.date, new Date().toISOString(), orgId]
+        // Stamp TODAY's local date (not summary.date) so the morning-recap
+        // flow — which passes yesterday's date — doesn't re-trigger every
+        // minute. The dedupe key is "have we sent anything today".
+        [toLocalDateString(new Date(), summary.timezone), new Date().toISOString(), orgId]
       );
       return { sent: true, html, recipient };
     }
@@ -426,11 +429,18 @@ export function startDailySummaryScheduler(): void {
         const hourTarget = typeof org.daily_summary_hour === 'number' ? org.daily_summary_hour : 18;
         if (localHour < hourTarget) continue;
 
+        // Morning send hours (before noon) want YESTERDAY's recap over
+        // coffee — "today" has barely started. Afternoon/evening hours
+        // want today's wrap-up. Noon is the pivot.
+        const targetDate = hourTarget < 12
+          ? toLocalDateString(new Date(Date.now() - 86400000), tz)
+          : todayLocal;
+
         // Try to send. If SMTP isn't wired we keep retrying every minute
         // (so the moment the admin sets env vars, the next minute fires)
         // but we only LOG the warning once per org per local hour, to
         // keep pm2 logs clean.
-        const result = await sendDailySummaryEmail(org.id, todayLocal);
+        const result = await sendDailySummaryEmail(org.id, targetDate);
         if (result.sent) {
           console.log(`✓ Sent daily summary to ${result.recipient}`);
         } else if (result.reason && result.reason.includes('SMTP not configured')) {
