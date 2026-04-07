@@ -232,7 +232,96 @@ async function generateSystemPrompt(db: any, orgId?: string): Promise<string> {
     p.avg_productivity = active > 0 ? Math.round((p.productive_seconds / active) * 100) : 0;
   }
 
+  // Top window titles per employee for TODAY. The 2026-04-07 audit caught
+  // Genesis saying "I cannot identify any Wix work" while the DB had 100+
+  // snapshots with title "Wix Studio | Overflow Plumbing & Drain". The
+  // prompt only had app names, so it was structurally blind to anything
+  // running inside a browser. This pulls the top 8 distinct window titles
+  // per employee from today so Genesis can answer "how much time on X
+  // today" for X = whatever the title says.
+  const todayTitles = await db.all(`
+    SELECT
+      e.name as employee_name,
+      a.window_title,
+      COUNT(*) as snapshots,
+      SUM(a.duration_seconds) as total_seconds
+    FROM activities a
+    JOIN employees e ON a.employee_id = e.id
+    WHERE a.timestamp > datetime('now', '-1 day') ${orgFilterAnd}
+      AND a.window_title IS NOT NULL
+      AND a.window_title != ''
+      AND a.app_name NOT IN ('loginwindow', 'Window Server', 'kernel', 'system', 'Finder', 'Dock')
+    GROUP BY e.id, a.window_title
+    ORDER BY snapshots DESC
+    LIMIT 40
+  `);
+
+  // First/last activity timestamp + biggest tracking gap per employee for
+  // TODAY. The audit also caught Genesis being unable to call out the 9h
+  // 45m work-day gap (laptop slept). With first/last + biggest-gap minutes
+  // in the prompt, Genesis can say "Mohammed had a 9h gap from 9:09am to
+  // 6:54pm — likely a sleeping laptop" instead of "I have no time data".
+  const todayBoundsRows = await db.all(`
+    SELECT
+      e.name as employee_name,
+      MIN(a.timestamp) as first_ts,
+      MAX(a.timestamp) as last_ts
+    FROM activities a
+    JOIN employees e ON a.employee_id = e.id
+    WHERE a.timestamp > datetime('now', '-1 day') ${orgFilterAnd}
+    GROUP BY e.id
+    HAVING COUNT(a.id) > 0
+  `);
+  // Compute biggest-gap (in seconds) by walking each employee's snapshots.
+  const employeeGaps: Array<{ name: string; firstTs: string; lastTs: string; biggestGapSec: number; gapStart?: string; gapEnd?: string }> = [];
+  for (const row of todayBoundsRows) {
+    const stamps = await db.all(
+      `SELECT timestamp FROM activities a
+       JOIN employees e ON a.employee_id = e.id
+       WHERE e.name = ? AND a.timestamp > datetime('now', '-1 day') ${orgFilterAnd}
+       ORDER BY timestamp ASC`,
+      [row.employee_name]
+    );
+    let biggestGapSec = 0;
+    let gapStart: string | undefined;
+    let gapEnd: string | undefined;
+    for (let i = 1; i < stamps.length; i++) {
+      const prev = new Date(stamps[i - 1].timestamp).getTime();
+      const next = new Date(stamps[i].timestamp).getTime();
+      const gapSec = Math.round((next - prev) / 1000);
+      if (gapSec > biggestGapSec) {
+        biggestGapSec = gapSec;
+        gapStart = stamps[i - 1].timestamp;
+        gapEnd = stamps[i].timestamp;
+      }
+    }
+    employeeGaps.push({
+      name: row.employee_name,
+      firstTs: row.first_ts,
+      lastTs: row.last_ts,
+      biggestGapSec,
+      gapStart,
+      gapEnd
+    });
+  }
+  const fmtTime = (iso: string | undefined) => {
+    if (!iso) return '?';
+    return new Date(iso).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  };
+  const fmtGap = (sec: number) => {
+    if (!sec || sec < 60) return '<1m';
+    const m = Math.round(sec / 60);
+    if (m < 60) return `${m}m`;
+    const h = Math.floor(m / 60);
+    return `${h}h ${m % 60}m`;
+  };
+
   return `You are Genesis, an AI analytics assistant for ArchTrack — an employee productivity tracking system.
+
+PRODUCTIVITY FORMULA (HARDCODED — DO NOT RESTATE OR INVENT A DIFFERENT FORMULA):
+  productivity_score = productive_seconds ÷ (productive_seconds + unproductive_seconds)
+  - Idle time and uncategorized "Other" time are tracked but NOT counted in either side of that ratio.
+  - When asked "what's the formula?" or "how is the score calculated?", answer with EXACTLY the formula above. Do not paraphrase, simplify, or substitute "total" for "(productive + unproductive)" — that would give a different (diluted) number than what the Dashboard and Reports show.
 
 IMPORTANT RULES:
 - Only reference data shown below. Do NOT make up numbers.
@@ -241,6 +330,8 @@ IMPORTANT RULES:
 - Each "activity" is a 10-second snapshot of what app the employee was using.
 - Give advice based on ACTUAL data patterns, not generic productivity tips.
 - Do NOT recommend random tools unless they're directly relevant to the apps being used.
+- The data below includes WINDOW TITLES (browser tab names, document names). When the user asks "how much time on X", search the window titles section for matching strings, not just the app names — most "X work" happens inside Chrome/Safari and the app name will just say "Chrome".
+- The data below includes PER-EMPLOYEE FIRST/LAST ACTIVITY TIMES + the BIGGEST TRACKING GAP today. Use these to call out work-day gaps (e.g. "Mohammed first synced at 1:14am, last synced at 9:13pm, but had a 9h45m gap from 9:09am to 6:54pm — likely a sleeping laptop or the tracker not running"). Don't say "I can't see when activities happened" — that information is right below.
 
 CURRENT TEAM (last 7 days):
 - Employees tracked: ${stats.employee_count || 0}
@@ -262,6 +353,12 @@ ${categoryBreakdown.map((c: any) => `- ${c.category_name}: ${fmt(c.total_seconds
 
 APP USAGE PATTERNS:
 ${employeePatterns.map((p: any) => `- ${p.name} uses ${p.app_name} [${p.category_name}]: ${p.times_used}x, ${fmt(p.total_seconds)}`).join('\n') || '- Not enough data yet'}
+
+TODAY'S TOP WINDOW TITLES (use this to answer "how much time on X today?" — X is usually in the title, not the app name):
+${todayTitles.map((t: any) => `- ${t.employee_name}: "${(t.window_title || '').slice(0, 80)}" — ${t.snapshots} snapshots, ${fmt(t.total_seconds)}`).join('\n') || '- No window title data today'}
+
+TODAY'S WORK WINDOW PER EMPLOYEE (first sync / last sync / biggest tracking gap):
+${employeeGaps.map(g => `- ${g.name}: first ${fmtTime(g.firstTs)}, last ${fmtTime(g.lastTs)}, biggest gap ${fmtGap(g.biggestGapSec)}${g.gapStart && g.biggestGapSec >= 600 ? ` (from ${fmtTime(g.gapStart)} to ${fmtTime(g.gapEnd)} — likely laptop sleep or tracker offline)` : ''}`).join('\n') || '- No activity today'}
 
 RESPONSE STYLE:
 - Be concise and data-driven. Reference specific numbers from the data above.

@@ -234,11 +234,31 @@ const GettingStarted: React.FC<{ orgName: string; onDismiss: () => void; showDis
   );
 };
 
+type DashboardScope = 'today' | 'week' | 'all';
+
 export const Dashboard: React.FC = () => {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Persist the scope across reloads so the admin doesn't have to re-pick
+  // every time. Default = today (the original behavior). The 2026-04-07
+  // audit caught the user mistaking 48m today for "all-time" because there
+  // was no day-scope toggle anywhere on the page.
+  const [scope, setScope] = useState<DashboardScope>(() => {
+    const saved = localStorage.getItem('archtrack_dashboard_scope');
+    return saved === 'week' || saved === 'all' ? saved : 'today';
+  });
+  // Activity feed state — separate from `stats` so we can paginate it
+  // independently and apply employee/category filters without re-fetching
+  // the rest of the dashboard.
+  const [feedActivities, setFeedActivities] = useState<Activity[]>([]);
+  const [feedTotal, setFeedTotal] = useState(0);
+  const [feedHasMore, setFeedHasMore] = useState(false);
+  const [feedLoading, setFeedLoading] = useState(false);
+  const [feedEmployeeFilter, setFeedEmployeeFilter] = useState<string>('');
+  const [feedCategoryFilter, setFeedCategoryFilter] = useState<string>('');
+  const PAGE = 20;
   const [showOnboarding, setShowOnboarding] = useState(() => {
     return localStorage.getItem('archtrack_onboarding_dismissed') !== 'true';
   });
@@ -250,18 +270,59 @@ export const Dashboard: React.FC = () => {
     setShowOnboarding(false);
   };
 
+  const changeScope = (next: DashboardScope) => {
+    setScope(next);
+    localStorage.setItem('archtrack_dashboard_scope', next);
+  };
+
   useEffect(() => {
     loadData();
     const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
-  }, []);
+    // Re-fetch when scope changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope]);
+
+  const buildFeedUrl = (offset: number) => {
+    const params = new URLSearchParams();
+    params.set('limit', String(PAGE));
+    params.set('offset', String(offset));
+    if (feedEmployeeFilter) params.set('employeeId', feedEmployeeFilter);
+    if (feedCategoryFilter) params.set('category', feedCategoryFilter);
+    return `/api/activity-feed?${params.toString()}`;
+  };
+
+  const loadFeed = async (reset: boolean) => {
+    setFeedLoading(true);
+    try {
+      const offset = reset ? 0 : feedActivities.length;
+      const res = await api.get(buildFeedUrl(offset));
+      if (res.success) {
+        const next = res.data.activities || [];
+        setFeedActivities(reset ? next : [...feedActivities, ...next]);
+        setFeedTotal(res.data.total || 0);
+        setFeedHasMore(!!res.data.hasMore);
+      }
+    } catch (e) {
+      // non-fatal — keep old feed
+      console.warn('Activity feed load failed', e);
+    } finally {
+      setFeedLoading(false);
+    }
+  };
+
+  // Reload the feed whenever its filters change.
+  useEffect(() => {
+    loadFeed(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [feedEmployeeFilter, feedCategoryFilter]);
 
   const loadData = async () => {
     try {
       setError(null);
       const tz = encodeURIComponent(getBrowserTz());
       const [statsData, employeesData] = await Promise.all([
-        api.get(`/api/dashboard/stats?tz=${tz}`),
+        api.get(`/api/dashboard/stats?tz=${tz}&scope=${scope}`),
         api.get('/api/employees')
       ]);
 
@@ -328,8 +389,40 @@ export const Dashboard: React.FC = () => {
   return (
     <div style={styles.container}>
       <header style={styles.header}>
-        <h1 style={styles.title}>Dashboard</h1>
-        <p style={styles.subtitle}>Real-time team productivity monitoring</p>
+        <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h1 style={styles.title}>Dashboard</h1>
+            <p style={styles.subtitle}>Real-time team productivity monitoring</p>
+          </div>
+          <div role="tablist" aria-label="Dashboard scope" style={{
+            display: 'inline-flex',
+            border: '1px solid #e0e6ed',
+            borderRadius: '8px',
+            overflow: 'hidden',
+            backgroundColor: '#fff'
+          }}>
+            {(['today', 'week', 'all'] as DashboardScope[]).map(s => (
+              <button
+                key={s}
+                role="tab"
+                aria-selected={scope === s}
+                onClick={() => changeScope(s)}
+                style={{
+                  padding: '8px 16px',
+                  border: 'none',
+                  backgroundColor: scope === s ? '#3498db' : 'transparent',
+                  color: scope === s ? '#fff' : '#2c3e50',
+                  cursor: 'pointer',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  textTransform: 'capitalize'
+                }}
+              >
+                {s === 'all' ? 'All Time' : s === 'week' ? 'This Week' : 'Today'}
+              </button>
+            ))}
+          </div>
+        </div>
       </header>
 
       {/* Alert Banner for Suspicious Activity */}
@@ -350,7 +443,7 @@ export const Dashboard: React.FC = () => {
             tooltip="productive time ÷ (productive + unproductive). Idle time and uncategorized 'Other' time are tracked but excluded from the score."
           />
           <StatCard
-            title="Focus Time Today"
+            title={scope === 'all' ? 'Focus Time (All Time)' : scope === 'week' ? 'Focus Time (Week)' : 'Focus Time Today'}
             value={formatDurationSeconds(stats?.focusSecondsToday ?? (stats?.focusTimeMinutes || 0) * 60)}
             icon="🎯"
             color="#27ae60"
@@ -360,6 +453,7 @@ export const Dashboard: React.FC = () => {
             value={formatDurationSeconds(stats?.distractedSecondsToday ?? (stats?.distractedTimeMinutes || 0) * 60)}
             icon="💤"
             color="#e74c3c"
+            tooltip="Idle time = the tracker stopped recording samples after ~2 minutes of no keyboard/mouse activity. Wall-clock hours can be much higher than tracked hours when you're in meetings, on calls, or watching videos without typing."
           />
           <StatCard
             title="Suspicious Activity"
@@ -427,7 +521,7 @@ export const Dashboard: React.FC = () => {
 
         {/* Time Breakdown */}
         <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>⏱️ Time Breakdown (Today)</h2>
+          <h2 style={styles.sectionTitle}>⏱️ Time Breakdown ({scope === 'all' ? 'All Time' : scope === 'week' ? 'This Week' : 'Today'})</h2>
           <div style={styles.breakdownGrid}>
             <BreakdownItem
               label="Core Work"
@@ -477,14 +571,49 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Recent Activity Feed */}
+        {/* Recent Activity Feed (paginated + filterable) */}
         <div style={styles.section}>
-          <h2 style={styles.sectionTitle}>📡 Live Activity Feed</h2>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center', marginBottom: '16px' }}>
+            <h2 style={{ ...styles.sectionTitle, marginBottom: 0, marginRight: 'auto' }}>📡 Live Activity Feed</h2>
+            <select
+              value={feedEmployeeFilter}
+              onChange={e => setFeedEmployeeFilter(e.target.value)}
+              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #d0d7de', fontSize: '13px' }}
+              aria-label="Filter by employee"
+            >
+              <option value="">All employees</option>
+              {employees.map(emp => (
+                <option key={emp.id} value={emp.id}>{emp.name}</option>
+              ))}
+            </select>
+            <select
+              value={feedCategoryFilter}
+              onChange={e => setFeedCategoryFilter(e.target.value)}
+              style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #d0d7de', fontSize: '13px' }}
+              aria-label="Filter by category"
+            >
+              <option value="">All categories</option>
+              <option value="core_work">Core Work</option>
+              <option value="communication">Communication</option>
+              <option value="research_learning">Research & Learning</option>
+              <option value="planning_docs">Planning & Docs</option>
+              <option value="break_idle">Break / Idle</option>
+              <option value="entertainment">Entertainment</option>
+              <option value="social_media">Social Media</option>
+              <option value="shopping_personal">Shopping / Personal</option>
+              <option value="other">Other</option>
+            </select>
+            <span style={{ fontSize: '12px', color: '#7f8c8d' }}>
+              {feedActivities.length} of {feedTotal}
+            </span>
+          </div>
           <div style={styles.activityList}>
-            {stats?.recentActivities?.length === 0 ? (
-              <p style={styles.emptyText}>No recent activity. Employees need to start the desktop tracker.</p>
+            {feedActivities.length === 0 ? (
+              <p style={styles.emptyText}>
+                {feedLoading ? 'Loading…' : 'No activity matches the current filter.'}
+              </p>
             ) : (
-              stats?.recentActivities?.slice(0, 20).map((activity) => (
+              feedActivities.map((activity) => (
                 <div
                   key={activity.id}
                   style={styles.activityItem(activity.isSuspicious, activity.isIdle)}
@@ -511,6 +640,17 @@ export const Dashboard: React.FC = () => {
               ))
             )}
           </div>
+          {feedHasMore && (
+            <div style={{ textAlign: 'center', marginTop: '16px' }}>
+              <button
+                onClick={() => loadFeed(false)}
+                disabled={feedLoading}
+                style={{ padding: '10px 24px', backgroundColor: '#3498db', color: '#fff', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: 600, cursor: feedLoading ? 'not-allowed' : 'pointer' }}
+              >
+                {feedLoading ? 'Loading…' : 'Load more'}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Suspicious Activity Log */}

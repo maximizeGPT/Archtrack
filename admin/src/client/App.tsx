@@ -7,6 +7,8 @@ import { Tasks } from './pages/Tasks';
 import { Reports } from './pages/Reports';
 import { DailySummary } from './pages/DailySummary';
 import { Screenshots } from './pages/Screenshots';
+import { Overrides } from './pages/Overrides';
+import { Team } from './pages/Team';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { ForgotPassword } from './pages/ForgotPassword';
@@ -18,7 +20,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import './App.css';
 
 type ConnectionStatus = 'loading' | 'connected' | 'disconnected';
-type Page = 'dashboard' | 'employees' | 'projects' | 'tasks' | 'reports' | 'summary' | 'screenshots';
+type Page = 'dashboard' | 'employees' | 'projects' | 'tasks' | 'reports' | 'summary' | 'screenshots' | 'overrides' | 'team';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -273,6 +275,18 @@ const AppContent: React.FC = () => {
             active={currentPage === 'screenshots'}
             onClick={() => handleNavClick('screenshots')}
           />
+          <NavItem
+            label="Overrides"
+            icon="🏷️"
+            active={currentPage === 'overrides'}
+            onClick={() => handleNavClick('overrides')}
+          />
+          <NavItem
+            label="Team"
+            icon="🛡️"
+            active={currentPage === 'team'}
+            onClick={() => handleNavClick('team')}
+          />
           {isMobile && (
             <NavItem
               label="Settings"
@@ -363,6 +377,8 @@ const AppContent: React.FC = () => {
           <Route path="/reports" element={<Reports />} />
           <Route path="/summary" element={<DailySummary />} />
           <Route path="/screenshots" element={<Screenshots />} />
+          <Route path="/overrides" element={<Overrides />} />
+          <Route path="/team" element={<Team />} />
           <Route path="*" element={<Dashboard />} />
         </Routes>
       </main>

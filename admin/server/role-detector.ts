@@ -299,28 +299,33 @@ export function reclassifyForRole(
   return { category: originalCategory, categoryName: getCategoryName(originalCategory), productivityScore: originalScore, productivityLevel: getLevelForScore(originalScore) };
 }
 
-// Apply classification overrides (admin-set)
+// Apply classification overrides (admin-set). Org-scoped: only overrides
+// belonging to the caller's org are considered, so one org can't override
+// classification for another org's activities even if they happen to share
+// an employee_id by accident.
 export async function applyOverrides(
   employeeId: string,
   roleType: string,
   appName: string,
   windowTitle: string,
   category: string,
-  score: number
+  score: number,
+  orgId?: string
 ): Promise<{ category: string; categoryName: string; productivityScore: number; productivityLevel: string }> {
   const db = getDatabase();
 
   // Check for employee-specific override first, then role-based, then global
   const override = await db.get(
     `SELECT * FROM classification_overrides
-     WHERE (employee_id = ? OR employee_id IS NULL)
+     WHERE (org_id IS NULL OR org_id = ?)
+     AND (employee_id = ? OR employee_id IS NULL)
      AND (role_type = ? OR role_type IS NULL)
      AND (LOWER(?) LIKE '%' || LOWER(app_pattern) || '%' OR LOWER(?) LIKE '%' || LOWER(app_pattern) || '%')
      ORDER BY
        CASE WHEN employee_id IS NOT NULL THEN 0 ELSE 1 END,
        CASE WHEN role_type IS NOT NULL THEN 0 ELSE 1 END
      LIMIT 1`,
-    [employeeId, roleType, appName, windowTitle]
+    [orgId || null, employeeId, roleType, appName, windowTitle]
   );
 
   if (override) {

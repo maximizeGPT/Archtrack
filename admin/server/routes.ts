@@ -50,7 +50,10 @@ export function setupRoutes(app: Express): void {
   app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
     try {
       const tz = typeof req.query.tz === 'string' ? req.query.tz : undefined;
-      const stats = await getDashboardStats(req.orgId!, tz);
+      const scopeRaw = typeof req.query.scope === 'string' ? req.query.scope : 'today';
+      const scope: 'today' | 'week' | 'all' =
+        scopeRaw === 'week' || scopeRaw === 'all' ? scopeRaw : 'today';
+      const stats = await getDashboardStats(req.orgId!, tz, scope);
       res.json({ success: true, data: stats });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
@@ -390,7 +393,8 @@ export function setupRoutes(app: Express): void {
             activityData.appName,
             activityData.windowTitle,
             category,
-            productivityScore
+            productivityScore,
+            orgId
           );
           category = overridden.category;
           categoryName = overridden.categoryName;
@@ -437,6 +441,83 @@ export function setupRoutes(app: Express): void {
           syncedCount: savedActivities.length,
           suspiciousCount,
           detectedRole: detectedRole.roleType !== 'unknown' ? detectedRole : undefined
+        }
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+
+  // Activity feed: paginated + filterable. Used by the Dashboard "Live
+  // Activity Feed" section to support Load More + employee/category
+  // filters. The 2026-04-07 audit caught that the dashboard only showed
+  // the most recent 20 with no way to dig deeper or scope to one employee
+  // or one category — admins had to scroll endlessly looking for context.
+  app.get('/api/activity-feed', requireAuth, async (req, res) => {
+    try {
+      const db = getDatabase();
+      const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 20, 1), 200);
+      const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
+      const employeeIdFilter = typeof req.query.employeeId === 'string' && req.query.employeeId ? req.query.employeeId : null;
+      const categoryFilter = typeof req.query.category === 'string' && req.query.category ? req.query.category : null;
+
+      const SYSTEM_APPS = [
+        'loginwindow', 'lockscreen', 'screensaver', 'window server', 'idle',
+        'usernotificationcenter', 'controlcenter', 'dock', 'notificationcenter'
+      ];
+      const sysExclusion = SYSTEM_APPS.map(() => 'LOWER(app_name) != ?').join(' AND ');
+
+      const where: string[] = ['org_id = ?'];
+      const params: any[] = [req.orgId!];
+      if (employeeIdFilter) {
+        where.push('employee_id = ?');
+        params.push(employeeIdFilter);
+      }
+      if (categoryFilter) {
+        where.push('category = ?');
+        params.push(categoryFilter);
+      }
+      where.push(sysExclusion);
+      params.push(...SYSTEM_APPS);
+
+      const rows = await db.all(
+        `SELECT * FROM activities
+          WHERE ${where.join(' AND ')}
+          ORDER BY timestamp DESC, created_at DESC
+          LIMIT ? OFFSET ?`,
+        [...params, limit, offset]
+      );
+
+      const countRow: any = await db.get(
+        `SELECT COUNT(*) as c FROM activities WHERE ${where.join(' AND ')}`,
+        params
+      );
+
+      // Map to client shape
+      const activities = (rows as any[]).map((r: any) => ({
+        id: r.id,
+        employeeId: r.employee_id,
+        timestamp: r.timestamp,
+        appName: r.app_name,
+        windowTitle: r.window_title,
+        category: r.category,
+        categoryName: r.category_name,
+        productivityScore: r.productivity_score,
+        productivityLevel: r.productivity_level,
+        isSuspicious: r.is_suspicious === 1,
+        suspiciousReason: r.suspicious_reason,
+        isIdle: r.is_idle === 1,
+        durationSeconds: r.duration_seconds
+      }));
+
+      res.json({
+        success: true,
+        data: {
+          activities,
+          total: countRow?.c || 0,
+          limit,
+          offset,
+          hasMore: offset + activities.length < (countRow?.c || 0)
         }
       });
     } catch (error) {
@@ -697,6 +778,75 @@ export function setupRoutes(app: Express): void {
     }
   });
 
+  // CSV export of an employee's activity rows for a date range. Used by
+  // the Reports page "Export CSV" button — solves the "no raw data export
+  // for payroll/invoicing" gap from DEFERRED.md. Returns a real CSV with
+  // a `Content-Disposition: attachment` header so browsers download it.
+  app.get('/api/reports/export.csv', requireAuth, async (req, res) => {
+    try {
+      const { employeeId, startDate, endDate } = req.query;
+      if (!employeeId || !startDate || !endDate) {
+        return res.status(400).json({ success: false, error: 'employeeId, startDate, and endDate are required' });
+      }
+      const viewTz = typeof req.query.tz === 'string' ? req.query.tz : undefined;
+      const db = getDatabase();
+      const orgRow = await db.get('SELECT timezone FROM organizations WHERE id = ?', [req.orgId!]);
+      const { resolveTimezone, getLocalDateRangeBounds } = await import('./timezone.js');
+      const tz = resolveTimezone(viewTz || orgRow?.timezone);
+      const [startUtc, endUtc] = getLocalDateRangeBounds(startDate as string, endDate as string, tz);
+
+      const rows: any[] = await db.all(
+        `SELECT a.timestamp, a.app_name, a.window_title, a.category, a.category_name,
+                a.productivity_score, a.productivity_level, a.is_idle, a.is_suspicious,
+                a.duration_seconds, e.name as employee_name
+         FROM activities a
+         LEFT JOIN employees e ON a.employee_id = e.id
+         WHERE a.employee_id = ? AND a.org_id = ?
+           AND a.timestamp >= ? AND a.timestamp < ?
+         ORDER BY a.timestamp ASC`,
+        [employeeId, req.orgId!, startUtc, endUtc]
+      );
+
+      const escape = (v: any): string => {
+        if (v === null || v === undefined) return '';
+        const s = String(v);
+        // Quote if contains comma, quote, or newline
+        if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+        return s;
+      };
+
+      const header = [
+        'timestamp_utc', 'employee', 'app', 'window_title', 'category', 'category_name',
+        'productivity_score', 'productivity_level', 'is_idle', 'is_suspicious', 'duration_seconds'
+      ];
+      const lines = [header.join(',')];
+      for (const r of rows) {
+        lines.push([
+          r.timestamp,
+          r.employee_name,
+          r.app_name,
+          r.window_title,
+          r.category,
+          r.category_name,
+          r.productivity_score,
+          r.productivity_level,
+          r.is_idle,
+          r.is_suspicious,
+          r.duration_seconds
+        ].map(escape).join(','));
+      }
+      const csv = lines.join('\n') + '\n';
+
+      const filename = `archtrack-${(employeeId as string).slice(0, 8)}-${startDate}-${endDate}.csv`;
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(csv);
+    } catch (error) {
+      console.error('CSV export failed:', error);
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+
   // ==========================================
   // Smart Role Detection Endpoints
   // ==========================================
@@ -771,11 +921,18 @@ export function setupRoutes(app: Express): void {
     });
   });
 
-  // Classification overrides
+  // Classification overrides — org-scoped per-org and per-employee. The
+  // admin UI lives at /overrides; the rule engine in role-detector.ts
+  // already reads this table when applying overrides at activity-ingest
+  // time, so adding rows here immediately changes how new activities are
+  // classified for the org.
   app.get('/api/overrides', requireAuth, async (req, res) => {
     try {
       const db = getDatabase();
-      const overrides = await db.all('SELECT * FROM classification_overrides ORDER BY created_at DESC');
+      const overrides = await db.all(
+        'SELECT * FROM classification_overrides WHERE org_id = ? ORDER BY created_at DESC',
+        [req.orgId!]
+      );
       res.json({ success: true, data: overrides });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
@@ -790,17 +947,30 @@ export function setupRoutes(app: Express): void {
         return res.status(400).json({ success: false, error: 'appPattern, category, and productivityScore are required' });
       }
 
+      // Validate that, if employeeId is given, it belongs to this org —
+      // otherwise an admin from one org could create an override targeting
+      // an employee in a different org.
+      if (employeeId) {
+        const empCheck = await getDatabase().get(
+          'SELECT id FROM employees WHERE id = ? AND org_id = ?',
+          [employeeId, req.orgId!]
+        );
+        if (!empCheck) {
+          return res.status(400).json({ success: false, error: 'Employee not found in your organization' });
+        }
+      }
+
       const db = getDatabase();
       const id = uuidv4();
       const now = new Date().toISOString();
 
       await db.run(
-        `INSERT INTO classification_overrides (id, employee_id, role_type, app_pattern, category, productivity_score, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [id, employeeId || null, roleType || null, appPattern, category, productivityScore, now]
+        `INSERT INTO classification_overrides (id, org_id, employee_id, role_type, app_pattern, category, productivity_score, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [id, req.orgId!, employeeId || null, roleType || null, appPattern, category, productivityScore, now]
       );
 
-      res.json({ success: true, data: { id, employeeId, roleType, appPattern, category, productivityScore } });
+      res.json({ success: true, data: { id, orgId: req.orgId, employeeId, roleType, appPattern, category, productivityScore } });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });
     }
@@ -809,7 +979,15 @@ export function setupRoutes(app: Express): void {
   app.delete('/api/overrides/:id', requireAuth, async (req, res) => {
     try {
       const db = getDatabase();
-      await db.run('DELETE FROM classification_overrides WHERE id = ?', [req.params.id]);
+      // Scope the delete to the caller's org so one admin can't delete
+      // another org's overrides by guessing IDs.
+      const result: any = await db.run(
+        'DELETE FROM classification_overrides WHERE id = ? AND org_id = ?',
+        [req.params.id, req.orgId!]
+      );
+      if (result?.changes === 0) {
+        return res.status(404).json({ success: false, error: 'Override not found' });
+      }
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ success: false, error: String(error) });

@@ -126,6 +126,42 @@ export const Reports: React.FC = () => {
         >
           {loading ? 'Generating...' : 'Generate Report'}
         </button>
+
+        <button
+          onClick={async () => {
+            if (!selectedEmployee || !startDate || !endDate) return;
+            // The endpoint is auth-gated; use fetch+token then trigger a
+            // download from the resulting blob. Plain <a href> won't work
+            // because we need to send the Bearer token.
+            try {
+              const tz = encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+              const token = localStorage.getItem('archtrack_token');
+              const res = await fetch(
+                `/api/reports/export.csv?employeeId=${selectedEmployee}&startDate=${startDate}&endDate=${endDate}&tz=${tz}`,
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+              if (!res.ok) {
+                alert('CSV export failed: ' + (await res.text()));
+                return;
+              }
+              const blob = await res.blob();
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `archtrack-${startDate}-${endDate}.csv`;
+              document.body.appendChild(a);
+              a.click();
+              setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+            } catch (e) {
+              alert('CSV export failed: ' + (e instanceof Error ? e.message : String(e)));
+            }
+          }}
+          disabled={!selectedEmployee || !startDate || !endDate}
+          style={{ ...styles.button, backgroundColor: '#27ae60' }}
+          title="Download raw activity rows as CSV (for payroll, invoicing, or external analysis)"
+        >
+          📥 Export CSV
+        </button>
       </div>
 
       {!report && !loading && (

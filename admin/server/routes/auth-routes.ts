@@ -385,6 +385,121 @@ export function setupAuthRoutes(app: Express): void {
     }
   });
 
+  // ─────────────────────────────────────────────────────────────────────
+  // Multi-admin team management
+  // ─────────────────────────────────────────────────────────────────────
+  // List all admin/owner users in the caller's org. Used by the Org
+  // Settings modal "Team" section so the owner can see who else has
+  // dashboard access.
+  app.get('/api/auth/team', requireAuth, async (req, res) => {
+    try {
+      const users = await db().all(
+        `SELECT id, email, name, role, created_at FROM users
+         WHERE org_id = ? ORDER BY created_at ASC`,
+        [req.orgId!]
+      );
+      res.json({ success: true, data: users });
+    } catch (error) {
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+
+  // Invite (create) a new admin user. Only an owner or admin can do this.
+  // For MVP we accept a password directly rather than emailing an invite
+  // link — the owner shares it out-of-band. Roles supported: 'admin' or
+  // 'owner'. The created user is scoped to the caller's org.
+  app.post('/api/auth/team', requireAuth, async (req, res) => {
+    try {
+      const { email, password, name, role } = req.body || {};
+      if (!email || !password || !name) {
+        return res.status(400).json({ success: false, error: 'email, password, and name are required' });
+      }
+      if (password.length < 6) {
+        return res.status(400).json({ success: false, error: 'Password must be at least 6 characters' });
+      }
+      const allowedRoles = new Set(['admin', 'owner']);
+      const finalRole = allowedRoles.has(role) ? role : 'admin';
+
+      // Caller must already be an admin/owner to add teammates.
+      const caller = await db().get(
+        'SELECT role FROM users WHERE id = ? AND org_id = ?',
+        [req.userId, req.orgId!]
+      );
+      if (!caller || (caller.role !== 'owner' && caller.role !== 'admin')) {
+        return res.status(403).json({ success: false, error: 'Only an owner or admin can invite teammates' });
+      }
+
+      // Email must be unique across the entire users table (it's the
+      // login identifier and the table has UNIQUE on email).
+      const existing = await db().get('SELECT id FROM users WHERE email = ?', [email]);
+      if (existing) {
+        return res.status(409).json({ success: false, error: 'A user with that email already exists' });
+      }
+
+      const now = new Date().toISOString();
+      const userId = uuidv4();
+      const passwordHash = await hashPassword(password);
+      await db().run(
+        `INSERT INTO users (id, org_id, email, password_hash, name, role, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [userId, req.orgId!, email, passwordHash, name, finalRole, now, now]
+      );
+
+      res.json({
+        success: true,
+        data: { id: userId, email, name, role: finalRole, created_at: now }
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+
+  // Remove a teammate. Refuses to delete the last owner of the org so the
+  // org doesn't get locked out.
+  app.delete('/api/auth/team/:id', requireAuth, async (req, res) => {
+    try {
+      const caller = await db().get(
+        'SELECT role FROM users WHERE id = ? AND org_id = ?',
+        [req.userId, req.orgId!]
+      );
+      if (!caller || (caller.role !== 'owner' && caller.role !== 'admin')) {
+        return res.status(403).json({ success: false, error: 'Only an owner or admin can remove teammates' });
+      }
+
+      // Don't let an admin delete themselves accidentally — they should
+      // log out and have someone else remove them. Less footgun-y.
+      if (req.params.id === req.userId) {
+        return res.status(400).json({ success: false, error: 'You cannot remove yourself. Ask another admin to do it.' });
+      }
+
+      const target = await db().get(
+        'SELECT id, role FROM users WHERE id = ? AND org_id = ?',
+        [req.params.id, req.orgId!]
+      );
+      if (!target) {
+        return res.status(404).json({ success: false, error: 'User not found in your organization' });
+      }
+
+      // Don't allow deleting the last owner — would lock the org out.
+      if (target.role === 'owner') {
+        const ownerCount: any = await db().get(
+          `SELECT COUNT(*) as c FROM users WHERE org_id = ? AND role = 'owner'`,
+          [req.orgId!]
+        );
+        if ((ownerCount?.c || 0) <= 1) {
+          return res.status(400).json({ success: false, error: 'Cannot remove the last owner. Promote another user to owner first.' });
+        }
+      }
+
+      await db().run('DELETE FROM users WHERE id = ? AND org_id = ?', [req.params.id, req.orgId!]);
+      // Also nuke their refresh tokens so they're forced out immediately.
+      await db().run('DELETE FROM refresh_tokens WHERE user_id = ?', [req.params.id]);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ success: false, error: String(error) });
+    }
+  });
+
   // Reset password: validate token and set new password
   app.post('/api/auth/reset-password', async (req, res) => {
     try {

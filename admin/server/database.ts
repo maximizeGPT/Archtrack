@@ -742,14 +742,31 @@ const SYSTEM_APP_BLACKLIST = [
 
 export async function getDashboardStats(
   orgId: string,
-  viewTimezone?: string
+  viewTimezone?: string,
+  scope: 'today' | 'week' | 'all' = 'today'
 ): Promise<any> {
   const db = getDatabase();
 
   // Resolve the timezone the admin wants to see "today" in.
   const orgRow = await db.get('SELECT timezone FROM organizations WHERE id = ?', [orgId]);
   const tz = resolveTimezone(viewTimezone || orgRow?.timezone);
-  const [startTodayUtc, endTodayUtc] = getLocalDayBounds(tz, 0);
+
+  // Window bounds for the requested scope. The dashboard tiles ("focus
+  // today", productivity, breakdown) all read from this same window so the
+  // toggle is just one switch in one place.
+  let startTodayUtc: string;
+  let endTodayUtc: string;
+  if (scope === 'week') {
+    const { getLocalWindowBounds } = await import('./timezone.js');
+    [startTodayUtc, endTodayUtc] = getLocalWindowBounds(tz, 7);
+  } else if (scope === 'all') {
+    // Cap at "year ago" so SQLite doesn't have to scan billions of rows on
+    // a long-running install. Adjust upward when needed.
+    const { getLocalWindowBounds } = await import('./timezone.js');
+    [startTodayUtc, endTodayUtc] = getLocalWindowBounds(tz, 365);
+  } else {
+    [startTodayUtc, endTodayUtc] = getLocalDayBounds(tz, 0);
+  }
 
   const withTimeout = <T>(promise: Promise<T>, ms: number, defaultValue: T): Promise<T> => {
     return Promise.race([
@@ -834,6 +851,7 @@ export async function getDashboardStats(
 
   return {
     timezone: tz,
+    scope,
     dayStart: startTodayUtc,
     dayEnd: endTodayUtc,
     totalEmployees: totalEmployees.count,

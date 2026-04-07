@@ -65,6 +65,66 @@ npx electron .
 
 > See **[Desktop Tracker Permissions](#desktop-tracker-permissions)** below for what each OS needs on first run.
 
+#### Auto-start the tracker on login (recommended)
+
+Laptops sleep when their lid closes. If the tracker isn't configured to
+auto-start on login + auto-restart on wake, you'll see large gaps in the
+activity feed (we caught a 9h 45m gap on a real workday before fixing this).
+
+**macOS — launchd agent:**
+```bash
+cd Archtrack/desktop
+./install-autostart-mac.sh           # normal mode (visible in dock)
+./install-autostart-mac.sh --stealth  # stealth mode (no dock, no tray)
+```
+The script writes `~/Library/LaunchAgents/com.archtrack.tracker.plist` and
+loads it. Tracker now launches at login and restarts automatically after a
+crash or wake-from-sleep.
+
+> ⚠️ **macOS TCC restriction:** if your Archtrack folder lives under
+> `~/Desktop`, `~/Documents`, or `~/Downloads`, macOS blocks launchd-spawned
+> processes from reading files there until you grant Full Disk Access to
+> the Electron binary. The install script prints the exact path. Easiest
+> fix: move the repo to a non-protected location like
+> `~/Library/Application Support/ArchTrack`.
+
+**Windows — Scheduled Task:**
+```powershell
+cd Archtrack\desktop
+powershell -ExecutionPolicy Bypass -File install-autostart-windows.ps1
+# Add -Stealth to hide the tracker
+```
+
+#### Rebuilding your local tracker after an ArchTrack update
+
+The tracker is a regular Node/Electron app — it does **not** auto-update
+when you `git pull` the repo. Server-side fixes (like the bug where Wix
+admin pages got tagged as social media because `x.com` was a substring of
+`wix.com`) ship to archtrack.live immediately, but the desktop tracker
+keeps running its old build until you rebuild it.
+
+After every `git pull`:
+```bash
+cd Archtrack
+npm install              # in case shared/ added a new dep
+cd desktop
+npm install              # in case desktop/ added a new dep
+killall Electron          # mac
+# or: taskkill /IM electron.exe /F  # windows
+npx electron .           # restart with the new build
+```
+
+If you installed the launchd autostart agent above, just unload + reload
+it instead:
+```bash
+launchctl unload ~/Library/LaunchAgents/com.archtrack.tracker.plist
+launchctl load ~/Library/LaunchAgents/com.archtrack.tracker.plist
+```
+
+Symptoms that you're running an old tracker build: missing screenshots
+(the screenshot capture loop was added in the 2026-04-06 batch), no
+stealth mode, or browser tabs misclassified as social media.
+
 ### 4. Watch It Work
 
 Go back to your dashboard at [archtrack.live](https://archtrack.live). Within a minute, you'll see employee activity — what apps they're using, productivity scores, time breakdowns. Check it from your phone too.
