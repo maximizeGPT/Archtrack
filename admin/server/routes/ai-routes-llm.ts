@@ -10,13 +10,24 @@ import { computeProductivityStats } from '../../shared-types.js';
  * the admin saw on the Dashboard, leading to e.g. "Mohammed at 54%" while
  * the Dashboard said 99%. Computing it here from the activity rows
  * guarantees Genesis sees the same numbers as the human-facing pages.
+ *
+ * `orgFilter` is the WHERE-clause fragment used elsewhere in this file —
+ * something like `AND org_id = 'xxx'` or `AND a.org_id = 'xxx'`. We accept
+ * either by stripping the alias and re-prefixing.
  */
 async function unifiedScoreFor(db: any, orgFilter: string, employeeFilter: string, daysBack: number): Promise<{ score: number; productiveSec: number; totalSec: number; }> {
+  // Normalize the orgFilter to use the `a.` alias since this query selects
+  // FROM activities a. The caller may pass either form.
+  let normalizedOrgFilter = '';
+  if (orgFilter) {
+    const stripped = orgFilter.replace(/^AND\s*/i, '').replace(/^a\./, '');
+    normalizedOrgFilter = `AND a.${stripped}`;
+  }
   const rows = await db.all(
-    `SELECT category, category_name, productivity_level, is_idle, duration_seconds
+    `SELECT a.category, a.category_name, a.productivity_level, a.is_idle, a.duration_seconds
      FROM activities a
-     WHERE timestamp > datetime('now', '-${daysBack} days')
-       ${orgFilter ? `AND ${orgFilter.replace(/^AND\s*/, '')}` : ''}
+     WHERE a.timestamp > datetime('now', '-${daysBack} days')
+       ${normalizedOrgFilter}
        ${employeeFilter}`
   );
   const stats = computeProductivityStats(
@@ -134,13 +145,17 @@ async function generateSystemPrompt(db: any, orgId?: string): Promise<string> {
 
   // Per-employee daily summary using the unified formula. We pull the
   // candidate employees first, then compute their score in JS.
+  // org filter on the employees table is `e.org_id = '...'`; on activities
+  // it's `a.org_id = '...'`. Building both directly here avoids the brittle
+  // string-rewriting that the previous version had.
+  const empOrgFilter = orgId ? `AND e.org_id = '${orgId}'` : '';
   const todayEmpRows = await db.all(`
     SELECT e.id, e.name, COUNT(a.id) as activities, SUM(a.duration_seconds) as total_seconds
     FROM employees e
     LEFT JOIN activities a ON a.employee_id = e.id
       AND a.timestamp > datetime('now', '-1 day')
       ${orgFilterAnd}
-    WHERE 1=1 ${orgFilter.replace(/^AND/, 'AND e.org_id = ').replace('e.org_id = AND', 'AND')}
+    WHERE e.is_active = 1 ${empOrgFilter}
     GROUP BY e.id
     ORDER BY activities DESC
     LIMIT 5
