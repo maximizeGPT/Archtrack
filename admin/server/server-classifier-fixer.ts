@@ -108,11 +108,18 @@ const RESEARCH_APPS: string[] = [
 // desktop tracker has its own list, but this server-side pass adds the
 // common SaaS / company-specific patterns we kept seeing in the wild.
 const BROWSER_WORK_INDICATORS: string[] = [
+  // ArchTrack / Genesis itself
   'archtrack',
   'genesis design',
   'genesis design studios',
+  // Claude / AI
   'claude.ai',
   'claude opus',
+  'chat.openai',
+  'chatgpt',
+  'gemini.google',
+  'perplexity',
+  // Google Workspace
   'google drive',
   'drive.google',
   'docs.google',
@@ -121,6 +128,7 @@ const BROWSER_WORK_INDICATORS: string[] = [
   'meet.google',
   'mail.google',
   'calendar.google',
+  // Project / collab SaaS
   'notion.so',
   'linear.app',
   'linear.com',
@@ -129,26 +137,98 @@ const BROWSER_WORK_INDICATORS: string[] = [
   'trello.com',
   'jira',
   'confluence',
+  'clickup.com',
+  'airtable',
+  'basecamp',
+  // Design / whiteboard
   'figma.com',
+  'figma -',
   'canva.com',
   'miro.com',
   'lucidchart',
-  'clickup.com',
-  'airtable',
+  'lucid.app',
+  'whimsical',
+  'framer.com',
+  // Dev / version control
   'github.com',
   'gitlab.com',
   'bitbucket',
   'stackoverflow',
   'mdn web docs',
   'developer.mozilla',
+  'devdocs',
+  'sentry.io',
+  'datadog',
+  'logtail',
+  'pagerduty',
+  // Cloud / infra dashboards
   'cloud.digitalocean',
   'console.aws',
   'console.cloud.google',
   'portal.azure',
   'vercel.com',
   'render.com',
+  'fly.io',
+  'railway.app',
   'supabase',
-  'firebase'
+  'firebase',
+  'planetscale',
+  'neon.tech',
+  'upstash',
+  // Website builders + hosting + DNS + domains (very common for SMB owners
+  // building their own site, like the user's uncle is doing for Overflow
+  // Plumbing on Wix)
+  'wix.com',
+  'wix studio',
+  'wixstudio',
+  'wix-platform',
+  'editor.wix',
+  'editorx.com',
+  'squarespace',
+  'webflow',
+  'shopify',
+  'wordpress',
+  'wp-admin',
+  'cpanel',
+  'plesk',
+  'namecheap',
+  'godaddy',
+  'name.com',
+  'porkbun',
+  'cloudflare',
+  'advanced dns',
+  'dns records',
+  'whois',
+  // E-commerce / payments / accounting / CRM
+  'stripe.com',
+  'dashboard.stripe',
+  'paypal',
+  'square',
+  'quickbooks',
+  'freshbooks',
+  'xero',
+  'wave',
+  'hubspot',
+  'salesforce',
+  'pipedrive',
+  // Communication / video / scheduling SaaS
+  'calendly',
+  'cal.com',
+  'loom.com',
+  'zoom.us',
+  'meet.zoom',
+  // Email / marketing
+  'mailchimp',
+  'klaviyo',
+  'sendgrid',
+  'resend.com',
+  'postmarkapp',
+  // ArchTrack-tracker-specific things we see in dev
+  'wix mcp',
+  'velo docs',
+  'oauth',
+  'authorize',
+  'authorization'
 ];
 
 const BROWSER_PROCESS_NAMES = [
