@@ -130,6 +130,42 @@ async function checkActivity(): Promise<void> {
     const timeSinceLastCheck = (now - lastCheckTime) / 1000;
     lastCheckTime = now;
 
+    // Detect tracker-suspended gaps (lunch / macOS App Nap / laptop lid).
+    // The setInterval normally fires every 10s. Anything bigger than ~2
+    // minutes means the process was paused while the user was away, and
+    // powerMonitor.getSystemIdleTime() will read near-zero on the very
+    // first check after wake (the user just moved the mouse), so the
+    // normal AFK-cutoff branch below would never trigger for this gap.
+    // Backfill ONE break_idle row covering the gap so the dashboard
+    // reconciles with wall-clock time. The lastActivity pointer is set
+    // to this row so the next normal sample's gap calc starts fresh.
+    if (timeSinceLastCheck > 120) {
+      const gapStartMs = now - Math.round(timeSinceLastCheck * 1000);
+      const idleGap: TrackedActivity = {
+        id: generateId(),
+        timestamp: new Date(gapStartMs).toISOString(),
+        appName: 'Idle',
+        windowTitle: 'Away from desk (tracker suspended)',
+        category: 'break_idle',
+        categoryName: 'Break/Idle',
+        productivityScore: 0,
+        productivityLevel: 'idle',
+        isSuspicious: false,
+        suspiciousReason: undefined,
+        isIdle: true,
+        idleTimeSeconds: Math.round(timeSinceLastCheck),
+        durationSeconds: Math.round(timeSinceLastCheck),
+        hasInputActivity: false
+      };
+      activities.push(idleGap);
+      offlineQueue.push(idleGap);
+      if (offlineQueue.length > 5000) {
+        offlineQueue.splice(0, offlineQueue.length - 5000);
+      }
+      lastActivity = idleGap;
+      console.log(`[${new Date().toLocaleTimeString('en-US', { hour12: false })}] 💤 GAP | Backfilled ${Math.round(timeSinceLastCheck / 60)}m of idle (tracker was suspended)`);
+    }
+
     // Get system idle time (in milliseconds, convert to seconds)
     const idleTimeMs = powerMonitor.getSystemIdleTime();
     const idleTimeSec = Math.floor(idleTimeMs / 1000);
@@ -248,12 +284,16 @@ async function checkActivity(): Promise<void> {
       isFullscreen: false
     });
 
-    // Duration this sample represents = time since the previous *recorded*
-    // activity, capped so a long pause/sleep can't inflate a single sample.
-    // Without this cap, each heartbeat would only count `timeSinceLastCheck`
-    // (~10s) and an honest 60-min session showed up as ~10 min.
-    const lastRecordedAt = lastActivity ? new Date(lastActivity.timestamp).getTime() : now - timeSinceLastCheck * 1000;
-    const gapSec = Math.min(Math.max(Math.round((now - lastRecordedAt) / 1000), 1), 90);
+    // Duration this sample represents = time since the END of the previous
+    // recorded activity (its timestamp + its own durationSeconds), capped so
+    // a single sample can't inflate into minutes. Without the cap, a suspend
+    // gap would double-count with the idle backfill above; without the
+    // "end time" adjustment, each heartbeat would only count the 10s poll
+    // interval and an honest 60-min session showed up as ~10 min.
+    const lastEndMs = lastActivity
+      ? new Date(lastActivity.timestamp).getTime() + (lastActivity.durationSeconds || 0) * 1000
+      : now - timeSinceLastCheck * 1000;
+    const gapSec = Math.min(Math.max(Math.round((now - lastEndMs) / 1000), 1), 90);
 
     // Create the activity record
     const activity: TrackedActivity = {
