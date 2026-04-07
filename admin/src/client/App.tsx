@@ -5,6 +5,8 @@ import { Employees } from './pages/Employees';
 import { Projects } from './pages/Projects';
 import { Tasks } from './pages/Tasks';
 import { Reports } from './pages/Reports';
+import { DailySummary } from './pages/DailySummary';
+import { Screenshots } from './pages/Screenshots';
 import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { ForgotPassword } from './pages/ForgotPassword';
@@ -16,7 +18,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import './App.css';
 
 type ConnectionStatus = 'loading' | 'connected' | 'disconnected';
-type Page = 'dashboard' | 'employees' | 'projects' | 'tasks' | 'reports';
+type Page = 'dashboard' | 'employees' | 'projects' | 'tasks' | 'reports' | 'summary' | 'screenshots';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
@@ -259,6 +261,18 @@ const AppContent: React.FC = () => {
             active={currentPage === 'reports'}
             onClick={() => handleNavClick('reports')}
           />
+          <NavItem
+            label="Daily Summary"
+            icon="📧"
+            active={currentPage === 'summary'}
+            onClick={() => handleNavClick('summary')}
+          />
+          <NavItem
+            label="Screenshots"
+            icon="📷"
+            active={currentPage === 'screenshots'}
+            onClick={() => handleNavClick('screenshots')}
+          />
           {isMobile && (
             <NavItem
               label="Settings"
@@ -347,6 +361,8 @@ const AppContent: React.FC = () => {
           <Route path="/projects" element={<Projects />} />
           <Route path="/tasks" element={<Tasks />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/summary" element={<DailySummary />} />
+          <Route path="/screenshots" element={<Screenshots />} />
           <Route path="*" element={<Dashboard />} />
         </Routes>
       </main>

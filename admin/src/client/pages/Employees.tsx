@@ -303,7 +303,11 @@ export const Employees: React.FC = () => {
             <h2 id="modal-title" style={styles.modalTitle}>
               {editingEmployee ? 'Edit Employee' : 'Add Employee'}
             </h2>
-            <form onSubmit={handleSubmit} style={styles.form}>
+            <form
+              onSubmit={handleSubmit}
+              style={styles.form}
+              noValidate
+            >
               {formError && (
                 <div style={styles.errorBanner}>
                   ⚠️ {formError}
