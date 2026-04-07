@@ -248,6 +248,13 @@ async function checkActivity(): Promise<void> {
       isFullscreen: false
     });
 
+    // Duration this sample represents = time since the previous *recorded*
+    // activity, capped so a long pause/sleep can't inflate a single sample.
+    // Without this cap, each heartbeat would only count `timeSinceLastCheck`
+    // (~10s) and an honest 60-min session showed up as ~10 min.
+    const lastRecordedAt = lastActivity ? new Date(lastActivity.timestamp).getTime() : now - timeSinceLastCheck * 1000;
+    const gapSec = Math.min(Math.max(Math.round((now - lastRecordedAt) / 1000), 1), 90);
+
     // Create the activity record
     const activity: TrackedActivity = {
       id: generateId(),
@@ -262,7 +269,7 @@ async function checkActivity(): Promise<void> {
       suspiciousReason: classification.suspiciousReason,
       isIdle: classification.isIdle,
       idleTimeSeconds: idleTimeSec,
-      durationSeconds: Math.round(timeSinceLastCheck),
+      durationSeconds: gapSec,
       hasInputActivity
     };
 
