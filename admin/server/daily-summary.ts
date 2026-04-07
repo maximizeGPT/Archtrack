@@ -14,6 +14,28 @@ import { getLocalDayBounds, resolveTimezone, toLocalDateString, localMidnightUtc
 import { computeProductivityStats, formatDurationSeconds } from '../shared-types.js';
 import { annotateOutsideHours, hasBusinessHours } from './business-hours.js';
 
+// ─────────────────────────────────────────────────────────────────────────
+// Email transports
+// ---------------------------------------------------------------------------
+// Two ways to send the daily summary, in priority order:
+//
+//   1. Resend API (preferred for archtrack.live):
+//      Set RESEND_API_KEY and (optionally) RESEND_FROM. Lightweight, no
+//      app passwords, free 3k emails/month, sender domain doesn't need
+//      DNS verification when sending to your own verified email.
+//
+//   2. Generic SMTP via nodemailer:
+//      Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM.
+//      Works for Gmail App Password, Mailgun, your own postfix, etc.
+//
+// If neither is configured the cron returns
+//   { sent: false, reason: 'SMTP/Resend not configured ...' }
+// and the in-app preview + manual send buttons still work.
+// ─────────────────────────────────────────────────────────────────────────
+
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const RESEND_FROM = process.env.RESEND_FROM || 'ArchTrack <onboarding@resend.dev>';
+
 const SMTP_HOST = process.env.SMTP_HOST || '';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_USER = process.env.SMTP_USER || '';
@@ -31,6 +53,30 @@ function getTransporter(): nodemailer.Transporter | null {
     auth: { user: SMTP_USER, pass: SMTP_PASS }
   });
   return transporter;
+}
+
+/**
+ * Send via Resend HTTP API. Returns null on success or an error message.
+ * Uses fetch directly so we don't pull in another package just for one
+ * endpoint.
+ */
+async function sendViaResend(to: string, subject: string, html: string): Promise<string | null> {
+  if (!RESEND_API_KEY) return 'no api key';
+  try {
+    const res = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${RESEND_API_KEY}`
+      },
+      body: JSON.stringify({ from: RESEND_FROM, to: [to], subject, html })
+    });
+    if (res.ok) return null;
+    const body = await res.text();
+    return `Resend HTTP ${res.status}: ${body.slice(0, 200)}`;
+  } catch (e) {
+    return `Resend network error: ${(e as Error).message}`;
+  }
 }
 
 export interface EmployeeDailySummary {
@@ -302,16 +348,32 @@ export async function sendDailySummaryEmail(orgId: string, date?: string): Promi
     return { sent: false, reason: 'no valid recipient configured', html };
   }
 
+  const subject = `ArchTrack Daily Summary — ${summary.orgName} · ${summary.date}`;
+
+  // Try Resend first if RESEND_API_KEY is set, then fall back to SMTP.
+  if (RESEND_API_KEY) {
+    const err = await sendViaResend(recipient, subject, html);
+    if (err === null) {
+      await db.run(
+        `UPDATE organizations SET daily_summary_last_sent_date = ?, updated_at = ? WHERE id = ?`,
+        [summary.date, new Date().toISOString(), orgId]
+      );
+      return { sent: true, html, recipient };
+    }
+    console.error(`Daily summary Resend failed for ${orgId}: ${err}`);
+    return { sent: false, reason: err, html, recipient };
+  }
+
   const t = getTransporter();
   if (!t) {
-    return { sent: false, reason: 'SMTP not configured (set SMTP_HOST/USER/PASS env vars)', html, recipient };
+    return { sent: false, reason: 'SMTP not configured (set RESEND_API_KEY or SMTP_HOST/USER/PASS env vars)', html, recipient };
   }
 
   try {
     await t.sendMail({
       from: SMTP_FROM,
       to: recipient,
-      subject: `ArchTrack Daily Summary — ${summary.orgName} · ${summary.date}`,
+      subject,
       html
     });
 
@@ -334,6 +396,12 @@ export async function sendDailySummaryEmail(orgId: string, date?: string): Promi
  * configured `daily_summary_hour` and which hasn't already been sent today.
  */
 export function startDailySummaryScheduler(): void {
+  // Tracks the last time we logged a "SMTP not configured" warning per
+  // org-day so the cron doesn't spam the log every 60 seconds while the
+  // admin hasn't wired SMTP yet. Cleared whenever the local date rolls
+  // over so each new day still surfaces the warning at least once.
+  const smtpWarningLastLoggedKey = new Map<string, string>(); // orgId → "YYYY-MM-DD-HH"
+
   const tick = async () => {
     try {
       const db = getDatabase();
@@ -358,20 +426,29 @@ export function startDailySummaryScheduler(): void {
         const hourTarget = typeof org.daily_summary_hour === 'number' ? org.daily_summary_hour : 18;
         if (localHour < hourTarget) continue;
 
-        console.log(`📧 Sending daily summary for org ${org.name} (${org.id}) — local ${tz} hour=${localHour} target=${hourTarget}`);
+        // Try to send. If SMTP isn't wired we keep retrying every minute
+        // (so the moment the admin sets env vars, the next minute fires)
+        // but we only LOG the warning once per org per local hour, to
+        // keep pm2 logs clean.
         const result = await sendDailySummaryEmail(org.id, todayLocal);
         if (result.sent) {
           console.log(`✓ Sent daily summary to ${result.recipient}`);
-        } else {
-          console.warn(`✗ Daily summary not sent: ${result.reason}`);
-          // Even if SMTP failed, mark as attempted to avoid spamming retries
-          // throughout the rest of the day. Reset at midnight automatically.
-          if (result.reason && !result.reason.includes('SMTP not configured')) {
-            await db.run(
-              `UPDATE organizations SET daily_summary_last_sent_date = ? WHERE id = ?`,
-              [todayLocal, org.id]
-            );
+        } else if (result.reason && result.reason.includes('SMTP not configured')) {
+          const warnKey = `${todayLocal}-${localHour.toString().padStart(2, '0')}`;
+          if (smtpWarningLastLoggedKey.get(org.id) !== warnKey) {
+            console.warn(`✗ [${org.name}] Daily summary ready to send but SMTP not configured. Set SMTP_HOST/PORT/USER/PASS/FROM env vars and pm2 will pick it up on the next tick.`);
+            smtpWarningLastLoggedKey.set(org.id, warnKey);
           }
+          // Don't mark as attempted — we want to retry the moment SMTP
+          // becomes available.
+        } else {
+          console.warn(`✗ Daily summary not sent for ${org.name}: ${result.reason}`);
+          // Mark as attempted so a hard failure (bad creds, DNS, etc.)
+          // doesn't keep firing every minute for the rest of the day.
+          await db.run(
+            `UPDATE organizations SET daily_summary_last_sent_date = ? WHERE id = ?`,
+            [todayLocal, org.id]
+          );
         }
       }
     } catch (e) {
