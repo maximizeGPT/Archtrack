@@ -12,6 +12,7 @@ import {
   ActivityCategory,
   SUSPICIOUS_THRESHOLDS
 } from './classifier.js';
+import { startScreenshotService } from './screenshot.js';
 
 // Dynamic import for active-win (ESM module)
 let activeWin: any = null;
@@ -99,6 +100,17 @@ export async function startTracking(): Promise<void> {
 
   // Check online status
   setInterval(checkOnlineStatus, 30000);
+
+  // Periodic screenshot capture — controlled by org-level settings on the
+  // server. Polls /api/organization to discover the current toggle and
+  // interval, and uploads via /api/screenshots when enabled.
+  startScreenshotService(
+    () => config.deviceToken || '',
+    () => ({
+      appName: lastActivity?.appName,
+      windowTitle: lastActivity?.windowTitle
+    })
+  );
 
   console.log('✓ Smart tracking active');
   console.log('✓ Employee:', config.employeeName, `(${config.employeeId})`);
