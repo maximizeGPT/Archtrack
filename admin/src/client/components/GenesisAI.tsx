@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { api } from '../lib/api';
 import './GenesisAI.css';
 
 // Simple markdown formatter
@@ -90,16 +91,13 @@ export function GenesisAI() {
 
     try {
       const endpoint = useLLM ? '/api/ai-llm/chat' : '/api/ai/chat';
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: text,
-          conversationId
-        })
+      // Use the api wrapper so the dashboard JWT (and refresh-on-401) is
+      // attached automatically. Without auth, the chat endpoint can't
+      // scope its prompt to the caller's org.
+      const data = await api.post(endpoint, {
+        question: text,
+        conversationId
       });
-
-      const data = await response.json();
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
