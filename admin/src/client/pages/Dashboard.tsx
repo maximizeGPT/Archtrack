@@ -442,6 +442,20 @@ export const Dashboard: React.FC = () => {
             color={getProductivityColor(stats?.averageProductivityScore || 0)}
             tooltip="productive time ÷ (productive + unproductive). Idle time and uncategorized 'Other' time are tracked but excluded from the score."
           />
+          {(() => {
+            const prod = stats?.productiveSecondsToday ?? 0;
+            const total = stats?.totalSecondsToday ?? 0;
+            const util = total > 0 ? Math.round((prod / total) * 100) : 0;
+            return (
+              <StatCard
+                title="Utilization"
+                value={`${util}%`}
+                icon="⚡"
+                color={getProductivityColor(util)}
+                tooltip="productive time ÷ total tracked time (including idle). The honest denominator — shows what share of the whole tracked day was actually productive work."
+              />
+            );
+          })()}
           <StatCard
             title={scope === 'all' ? 'Focus Time (All Time)' : scope === 'week' ? 'Focus Time (Week)' : 'Focus Time Today'}
             value={formatDurationSeconds(stats?.focusSecondsToday ?? (stats?.focusTimeMinutes || 0) * 60)}
