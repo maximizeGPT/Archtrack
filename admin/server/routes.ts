@@ -38,6 +38,7 @@ import {
   ROLE_PROFILES
 } from './role-detector.js';
 import { requireAuth, requireDeviceAuth, requireAnyAuth } from './auth.js';
+import { fixActivityClassification } from './server-classifier-fixer.js';
 
 export function setupRoutes(app: Express): void {
   // Health check
@@ -344,10 +345,27 @@ export function setupRoutes(app: Express): void {
       }
 
       for (const activityData of activities) {
-        let category = activityData.category;
-        let categoryName = activityData.categoryName;
-        let productivityScore = activityData.productivityScore;
-        let productivityLevel = activityData.productivityLevel;
+        // Step 1: server-side classifier fixer. Drops macOS system noise
+        // entirely and reclassifies bare-name Mac apps + common SaaS
+        // browser tabs that the desktop tracker's classifier missed.
+        // This catches activities from older trackers that don't have
+        // the latest shared/src/classification.ts rules.
+        const fixed = fixActivityClassification({
+          appName: activityData.appName || '',
+          windowTitle: activityData.windowTitle || '',
+          category: activityData.category || 'other',
+          categoryName: activityData.categoryName || 'Other',
+          productivityScore: activityData.productivityScore ?? 30,
+          productivityLevel: activityData.productivityLevel || 'neutral'
+        });
+        if (!fixed) {
+          // System process — skip the activity entirely.
+          continue;
+        }
+        let category = fixed.category;
+        let categoryName = fixed.categoryName;
+        let productivityScore = fixed.productivityScore;
+        let productivityLevel: Activity['productivityLevel'] = fixed.productivityLevel;
 
         // Apply role-based reclassification if role is detected or overridden
         if (detectedRole.roleType !== 'unknown' && detectedRole.status !== 'learning') {

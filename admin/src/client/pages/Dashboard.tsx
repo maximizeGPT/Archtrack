@@ -347,6 +347,7 @@ export const Dashboard: React.FC = () => {
             value={`${stats?.averageProductivityScore || 0}%`}
             icon="📊"
             color={getProductivityColor(stats?.averageProductivityScore || 0)}
+            tooltip="productive time ÷ (productive + unproductive). Idle time and uncategorized 'Other' time are tracked but excluded from the score."
           />
           <StatCard
             title="Focus Time Today"
@@ -468,6 +469,11 @@ export const Dashboard: React.FC = () => {
               minutes={stats?.productivityBreakdown?.shoppingPersonal || 0}
               color="#f39c12"
             />
+            <BreakdownItem
+              label="Other"
+              minutes={stats?.productivityBreakdown?.other || 0}
+              color="#bdc3c7"
+            />
           </div>
         </div>
 
@@ -545,14 +551,37 @@ interface StatCardProps {
   value: string | number;
   icon: string;
   color: string;
+  tooltip?: string;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color }) => (
-  <div style={{ ...styles.statCard, borderLeftColor: color }}>
+const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, tooltip }) => (
+  <div style={{ ...styles.statCard, borderLeftColor: color }} title={tooltip}>
     <div style={styles.statIcon(color)}>{icon}</div>
-    <div>
+    <div style={{ flex: 1 }}>
       <div style={{ ...styles.statValue, color }}>{value}</div>
-      <div style={styles.statTitle}>{title}</div>
+      <div style={{ ...styles.statTitle, display: 'flex', alignItems: 'center', gap: '4px' }}>
+        {title}
+        {tooltip && (
+          <span
+            aria-label={tooltip}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '14px',
+              height: '14px',
+              borderRadius: '50%',
+              backgroundColor: '#e5e7eb',
+              color: '#7f8c8d',
+              fontSize: '10px',
+              fontWeight: 700,
+              cursor: 'help'
+            }}
+          >
+            ?
+          </span>
+        )}
+      </div>
     </div>
   </div>
 );
