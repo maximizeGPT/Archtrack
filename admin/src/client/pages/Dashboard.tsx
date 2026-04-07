@@ -695,38 +695,41 @@ interface StatCardProps {
 }
 
 const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, tooltip }) => {
-  const [open, setOpen] = useState(false);
+  const [pinned, setPinned] = useState(false);
   useEffect(() => {
-    if (!open) return;
-    const close = () => setOpen(false);
-    window.addEventListener('click', close);
-    return () => window.removeEventListener('click', close);
-  }, [open]);
+    if (!pinned) return;
+    const close = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest('[data-tip-root]')) return;
+      setPinned(false);
+    };
+    // attach on next tick so the opening click doesn't immediately close it
+    const t = setTimeout(() => document.addEventListener('click', close), 0);
+    return () => { clearTimeout(t); document.removeEventListener('click', close); };
+  }, [pinned]);
   return (
     <div style={{ ...styles.statCard, borderLeftColor: color }}>
       <div style={styles.statIcon(color)}>{icon}</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ ...styles.statValue, color }}>{value}</div>
-        <div style={{ ...styles.statTitle, display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}>
+        <div style={{ ...styles.statTitle, display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span>{title}</span>
           {tooltip && (
-            <>
+            <span data-tip-root style={{ position: 'relative', display: 'inline-flex' }} className="tip-wrap">
               <button
                 type="button"
                 aria-label={tooltip}
-                onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
-                onMouseEnter={() => setOpen(true)}
-                onMouseLeave={() => setOpen(false)}
+                onClick={() => setPinned(p => !p)}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  width: '16px',
-                  height: '16px',
+                  width: '18px',
+                  height: '18px',
                   borderRadius: '50%',
                   backgroundColor: '#e5e7eb',
                   color: '#6b7280',
-                  fontSize: '11px',
+                  fontSize: '12px',
                   fontWeight: 700,
                   cursor: 'pointer',
                   border: 'none',
@@ -736,31 +739,35 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, tooltip 
               >
                 ?
               </button>
-              {open && (
-                <div
-                  role="tooltip"
-                  style={{
-                    position: 'absolute',
-                    top: '100%',
-                    left: 0,
-                    marginTop: '6px',
-                    zIndex: 1000,
-                    backgroundColor: '#1f2937',
-                    color: '#f9fafb',
-                    fontSize: '12px',
-                    fontWeight: 400,
-                    lineHeight: 1.4,
-                    padding: '8px 10px',
-                    borderRadius: '6px',
-                    width: 'min(260px, 80vw)',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                    pointerEvents: 'none',
-                  }}
-                >
-                  {tooltip}
-                </div>
-              )}
-            </>
+              <span
+                className="tip-bubble"
+                role="tooltip"
+                data-pinned={pinned ? 'true' : 'false'}
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  marginTop: '8px',
+                  zIndex: 1000,
+                  backgroundColor: '#1f2937',
+                  color: '#f9fafb',
+                  fontSize: '12px',
+                  fontWeight: 400,
+                  lineHeight: 1.4,
+                  padding: '8px 10px',
+                  borderRadius: '6px',
+                  width: 'min(260px, 80vw)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                  pointerEvents: 'none',
+                  textTransform: 'none',
+                  letterSpacing: 'normal',
+                  whiteSpace: 'normal',
+                }}
+              >
+                {tooltip}
+              </span>
+            </span>
           )}
         </div>
       </div>

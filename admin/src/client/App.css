@@ -417,3 +417,15 @@
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+.tip-bubble {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease;
+}
+.tip-wrap:hover .tip-bubble,
+.tip-wrap:focus-within .tip-bubble,
+.tip-bubble[data-pinned="true"] {
+  opacity: 1;
+  visibility: visible;
+}
