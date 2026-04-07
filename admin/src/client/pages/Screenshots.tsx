@@ -42,6 +42,15 @@ export const Screenshots: React.FC = () => {
       const params = new URLSearchParams();
       if (employeeId) params.set('employeeId', employeeId);
       if (date) params.set('date', date);
+      // Send the browser's IANA timezone so the server can convert the
+      // YYYY-MM-DD picker value into the right [startUtc, endUtc) range.
+      // Without this, screenshots captured after local midnight in UTC
+      // (i.e. evenings in the Americas) get filed under "tomorrow" UTC
+      // and become invisible.
+      try {
+        const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (tz) params.set('tz', tz);
+      } catch { /* default to org tz */ }
       params.set('limit', '500');
       const res = await api.get(`/api/screenshots?${params.toString()}`);
       if (!res?.success) throw new Error(res?.error || 'Failed to load');

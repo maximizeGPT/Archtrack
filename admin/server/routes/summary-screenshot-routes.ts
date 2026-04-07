@@ -212,8 +212,22 @@ export function setupSummaryScreenshotRoutes(app: Express): void {
         params.push(req.query.employeeId);
       }
       if (typeof req.query.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.date)) {
-        wheres.push("substr(timestamp, 1, 10) = ?");
-        params.push(req.query.date);
+        // Convert the local YYYY-MM-DD into a [startUtc, endUtc) range
+        // using either the explicitly-provided ?tz= or the org's timezone
+        // (or UTC). Filing by substr(timestamp, 1, 10) was a bug because
+        // timestamps are stored in UTC, so a 9 PM PST screenshot lands on
+        // the next UTC day and got hidden when the picker showed "today".
+        const { resolveTimezone, getLocalDateRangeBounds } = await import('../timezone.js');
+        const orgRow = await db.get(
+          `SELECT timezone FROM organizations WHERE id = ?`,
+          [req.orgId!]
+        );
+        const tz = resolveTimezone(
+          (typeof req.query.tz === 'string' && req.query.tz) || orgRow?.timezone
+        );
+        const [startUtc, endUtc] = getLocalDateRangeBounds(req.query.date, req.query.date, tz);
+        wheres.push('timestamp >= ? AND timestamp < ?');
+        params.push(startUtc, endUtc);
       }
 
       const limit = Math.min(parseInt(String(req.query.limit || '100'), 10) || 100, 500);
