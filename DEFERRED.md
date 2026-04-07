@@ -5,6 +5,52 @@ don't lose the context. Add new items to the top of the relevant section.
 
 ---
 
+## 🧪 Known edge cases — audit findings 2026-04-07
+
+These came out of the pre-handoff critical-thinking pass. Not blockers, but
+worth cleaning up before scaling the user base beyond your uncle's shop.
+
+### DST transition day bounds (23h / 25h days)
+`getLocalDayBounds` relies on `Intl.DateTimeFormat` math, which should
+handle spring-forward / fall-back correctly in principle, but we have no
+test covering it. On a 23-hour day, activities near the skipped hour
+could theoretically land in the wrong bucket. **Action:** add a unit test
+around March / November DST dates for US + EU timezones. Spot-check the
+dashboard + daily summary on the next real transition day.
+
+### Offline queue hard cap (5000 entries)
+Tracker drops the oldest entry when the offline queue hits 5000. At 60s
+poll that's ~83 hours of offline capacity — fine for vacations (most of
+which would be `break_idle` anyway) but a user offline for 2+ weeks with
+a running tracker loses the beginning of their offline period.
+**Action:** persist the queue to disk (SQLite or JSON file in userData)
+so it survives restarts AND isn't bounded by RAM. Also add a startup
+check that warns if the queue is getting large.
+
+### Tracker clock skew
+We trust the laptop's system clock. If an employee's clock is wrong by
+hours, their "today" drifts accordingly. No mitigation yet.
+**Action:** have the tracker query the server's `/api/time` on boot
+(endpoint doesn't exist yet) and log a warning if skew > 5 min. Do NOT
+rewrite timestamps — just surface the drift to the admin.
+
+### Email deliverability on Resend free tier
+Resend's onboarding sender can't reach arbitrary recipients on free tier,
+so the Team-invite flow currently shares credentials out-of-band (documented
+in `admin/src/client/pages/Team.tsx`). The daily summary works fine because
+the recipient is usually the owner's own email.
+**Action:** (a) get a verified custom sending domain on Resend (cheap +
+instant), or (b) swap to a transactional SMTP provider with no recipient
+whitelist. Either unlocks real invite emails.
+
+### Screenshot retention — per-org override
+Currently a single global constant (30 days, tunable via
+`SCREENSHOT_RETENTION_DAYS` env var). Fine for MVP. If an org ever needs
+longer retention for compliance / audit, add a per-org column and respect
+it in `screenshot-retention.ts`.
+
+---
+
 ## 🔥 High value, not yet started
 
 ### Per-project time rollup (activities → projects/tasks) — schema added, no UI yet

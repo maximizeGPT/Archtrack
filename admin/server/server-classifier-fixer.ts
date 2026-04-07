@@ -161,11 +161,19 @@ const BROWSER_WORK_INDICATORS: string[] = [
   'datadog',
   'logtail',
   'pagerduty',
-  // Cloud / infra dashboards
+  // Cloud / infra dashboards. Include both the URL-style match (when the
+  // browser puts the hostname in the title) and the product-name match
+  // (when the page <title> only shows the human-readable label, e.g.
+  // "archtrack-prod - DigitalOcean Droplet Web Console").
   'cloud.digitalocean',
+  'digitalocean',
   'console.aws',
+  'aws console',
+  'aws management',
   'console.cloud.google',
+  'google cloud console',
   'portal.azure',
+  'microsoft azure',
   'vercel.com',
   'render.com',
   'fly.io',
