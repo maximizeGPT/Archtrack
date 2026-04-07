@@ -238,7 +238,7 @@ export const Overrides: React.FC = () => {
 };
 
 const styles: { [key: string]: React.CSSProperties } = {
-  container: { padding: '32px' },
+  container: { padding: 'clamp(16px, 4vw, 32px)' },
   header: { marginBottom: '24px' },
   title: { fontSize: '28px', fontWeight: 600, color: '#2c3e50', margin: 0 },
   subtitle: { fontSize: '14px', color: '#7f8c8d', marginTop: '8px', maxWidth: '760px', lineHeight: 1.5 },

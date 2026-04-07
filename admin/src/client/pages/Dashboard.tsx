@@ -694,38 +694,79 @@ interface StatCardProps {
   tooltip?: string;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, tooltip }) => (
-  <div style={{ ...styles.statCard, borderLeftColor: color }} title={tooltip}>
-    <div style={styles.statIcon(color)}>{icon}</div>
-    <div style={{ flex: 1 }}>
-      <div style={{ ...styles.statValue, color }}>{value}</div>
-      <div style={{ ...styles.statTitle, display: 'flex', alignItems: 'center', gap: '4px' }}>
-        {title}
-        {tooltip && (
-          <span
-            aria-label={tooltip}
-            title={tooltip}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '14px',
-              height: '14px',
-              borderRadius: '50%',
-              backgroundColor: '#e5e7eb',
-              color: '#7f8c8d',
-              fontSize: '10px',
-              fontWeight: 700,
-              cursor: 'help'
-            }}
-          >
-            ?
-          </span>
-        )}
+const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, tooltip }) => {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [open]);
+  return (
+    <div style={{ ...styles.statCard, borderLeftColor: color }}>
+      <div style={styles.statIcon(color)}>{icon}</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ ...styles.statValue, color }}>{value}</div>
+        <div style={{ ...styles.statTitle, display: 'flex', alignItems: 'center', gap: '6px', position: 'relative' }}>
+          <span>{title}</span>
+          {tooltip && (
+            <>
+              <button
+                type="button"
+                aria-label={tooltip}
+                onClick={e => { e.stopPropagation(); setOpen(o => !o); }}
+                onMouseEnter={() => setOpen(true)}
+                onMouseLeave={() => setOpen(false)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: '16px',
+                  height: '16px',
+                  borderRadius: '50%',
+                  backgroundColor: '#e5e7eb',
+                  color: '#6b7280',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: 'none',
+                  padding: 0,
+                  lineHeight: 1,
+                }}
+              >
+                ?
+              </button>
+              {open && (
+                <div
+                  role="tooltip"
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    marginTop: '6px',
+                    zIndex: 1000,
+                    backgroundColor: '#1f2937',
+                    color: '#f9fafb',
+                    fontSize: '12px',
+                    fontWeight: 400,
+                    lineHeight: 1.4,
+                    padding: '8px 10px',
+                    borderRadius: '6px',
+                    width: 'min(260px, 80vw)',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  {tooltip}
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 interface BreakdownItemProps {
   label: string;

@@ -146,6 +146,7 @@ export const Team: React.FC = () => {
 
       <section style={styles.card}>
         <h2 style={styles.cardTitle}>Active dashboard users ({users.length})</h2>
+        <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
         <table style={styles.table}>
           <thead>
             <tr>
@@ -175,13 +176,14 @@ export const Team: React.FC = () => {
             ))}
           </tbody>
         </table>
+        </div>
       </section>
     </div>
   );
 };
 
 const styles: { [key: string]: any } = {
-  container: { padding: '32px' },
+  container: { padding: 'clamp(16px, 4vw, 32px)' },
   header: { marginBottom: '24px' },
   title: { fontSize: '28px', fontWeight: 600, color: '#2c3e50', margin: 0 },
   subtitle: { fontSize: '14px', color: '#7f8c8d', marginTop: '8px' },
@@ -192,7 +194,7 @@ const styles: { [key: string]: any } = {
   row: { display: 'flex', gap: '16px', flexWrap: 'wrap' },
   label: { display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '13px', fontWeight: 600, color: '#2c3e50', flex: 1, minWidth: '200px' },
   input: { padding: '10px 12px', border: '1px solid #d0d7de', borderRadius: '6px', fontSize: '14px', fontWeight: 400 },
-  table: { width: '100%', borderCollapse: 'collapse' },
+  table: { width: '100%', borderCollapse: 'collapse', minWidth: '560px' },
   th: { textAlign: 'left', padding: '10px 12px', borderBottom: '2px solid #e0e6ed', fontSize: '12px', textTransform: 'uppercase', color: '#7f8c8d', fontWeight: 600 },
   td: { padding: '10px 12px', borderBottom: '1px solid #f1f5f9', fontSize: '14px', color: '#2c3e50' },
   deleteBtn: { padding: '6px 12px', backgroundColor: '#fee2e2', color: '#dc2626', border: 'none', borderRadius: '4px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' },
