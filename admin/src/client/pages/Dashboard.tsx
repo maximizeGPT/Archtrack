@@ -704,6 +704,7 @@ const StatCard: React.FC<StatCardProps> = ({ title, value, icon, color, tooltip 
         {tooltip && (
           <span
             aria-label={tooltip}
+            title={tooltip}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
