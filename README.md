@@ -194,6 +194,57 @@ to their hourly rate. Supported: USD, EUR, GBP, INR, CAD, AUD, JPY, AED,
 SAR, SGD, BRL, MXN, ZAR, CHF, CNY. Reports and the Employees list format the
 rate with the appropriate symbol.
 
+### Daily Email Summary
+Toggle on **Daily Email Summary** in Organization Settings, set a recipient
+and an hour, and ArchTrack will email a per-employee productivity summary
+once a day. The email contains:
+- Team productivity score, total tracked time, productive time
+- Per-employee score, total / productive / idle, top 5 apps with category
+- Suspicious activity badges, "outside business hours" callouts when set
+
+The summary is also viewable in the **Daily Summary** page in the dashboard
+(useful for previewing what will go out, or sending a test on demand).
+
+To wire SMTP, set these env vars on the server (PM2 / `pm2 ecosystem.config.cjs`
+or your preferred process manager):
+
+```bash
+SMTP_HOST=smtp.your-provider.com
+SMTP_PORT=587
+SMTP_USER=your-smtp-user
+SMTP_PASS=your-smtp-pass
+SMTP_FROM="ArchTrack <noreply@yourdomain.com>"
+```
+
+If SMTP isn't configured, the cron still runs, the summary is still generated,
+and the in-app preview still works. Only the actual mail send is gated.
+
+### Periodic Screenshots
+Toggle on **Periodic Screenshots** in Organization Settings, pick a capture
+interval (1–60 min) and a retention window (1–365 days), and the desktop
+tracker will quietly capture the primary display, JPEG-compress it, and
+upload it to your dashboard. Browse them per-employee, per-day in the
+**Screenshots** page (grid view + click for full-size lightbox + per-shot
+delete). Old screenshots are auto-removed after the retention window.
+
+Screenshots are off by default. Storage path on the server:
+`admin/data/uploads/screenshots/<orgId>/<employeeId>/<YYYY-MM-DD>/<id>.jpg`.
+
+### Stealth Mode (Desktop Tracker)
+The tracker can run completely invisibly: no menu-bar / tray icon, no dock
+icon on macOS, silent boot. Enable by launching with the `ARCHTRACK_STEALTH=1`
+env var:
+
+```bash
+ARCHTRACK_STEALTH=1 npx electron .
+```
+
+Combined with a launch agent (macOS `launchd` plist) or a Windows scheduled
+task, the tracker becomes invisible to the employee while still uploading
+activity + screenshots to the admin dashboard. Performance overhead is
+negligible — the tracker checks the active window every 10 seconds and
+syncs every 60 seconds.
+
 ### Multi-Tenant
 - Each business is completely isolated
 - One server handles unlimited companies
