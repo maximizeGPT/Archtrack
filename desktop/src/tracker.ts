@@ -266,20 +266,25 @@ async function checkActivity(): Promise<void> {
       hasInputActivity
     };
 
-    // FIX: Record activity if:
-    // 1. Window/app has changed (user switched apps)
-    // 2. OR it's been 60 seconds since last recorded activity (periodic heartbeat)
-    // 3. OR the activity is suspicious (always record these)
-    // 4. AND user is not idle for more than 30 seconds (prevents tracking when AFK)
-    // This ensures we capture all meaningful activity without spamming
-    const windowChanged = !lastActivity || 
-      lastActivity.appName !== activity.appName || 
+    // Record activity if:
+    // 1. Window/app has changed (user switched apps), OR
+    // 2. It's been 60 seconds since last recorded activity (heartbeat), OR
+    // 3. The activity is suspicious.
+    //
+    // The AFK cutoff above (idleTimeSec > 300) already drops snapshots when
+    // the user is genuinely away for 5+ minutes. Between 0 and 5 minutes of
+    // input inactivity the user is *present* — reading, watching a video, in
+    // a meeting — and we MUST keep recording, otherwise an honest 60-minute
+    // work session shows up as 15 minutes on the dashboard. (Previously the
+    // record gate also AND'd on `idleTimeSec < 30`, which silently dropped
+    // every snapshot during a reading session.)
+    const windowChanged = !lastActivity ||
+      lastActivity.appName !== activity.appName ||
       lastActivity.windowTitle !== activity.windowTitle;
-    const significantTimePassed = !lastActivity || 
+    const significantTimePassed = !lastActivity ||
       (Date.now() - new Date(lastActivity.timestamp).getTime()) >= 60000;
-    const isUserActive = idleTimeSec < 30; // User has interacted within last 30 seconds
-    
-    const shouldRecord = (windowChanged || significantTimePassed || classification.isSuspicious) && isUserActive;
+
+    const shouldRecord = windowChanged || significantTimePassed || classification.isSuspicious;
 
     if (shouldRecord) {
       activities.push(activity);

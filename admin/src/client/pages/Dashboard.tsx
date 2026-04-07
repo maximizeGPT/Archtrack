@@ -453,7 +453,7 @@ export const Dashboard: React.FC = () => {
             value={formatDurationSeconds(stats?.distractedSecondsToday ?? (stats?.distractedTimeMinutes || 0) * 60)}
             icon="💤"
             color="#e74c3c"
-            tooltip="Idle time = the tracker stopped recording samples after ~2 minutes of no keyboard/mouse activity. Wall-clock hours can be much higher than tracked hours when you're in meetings, on calls, or watching videos without typing."
+            tooltip="Idle = the tracker logged the user as away (5+ min with no keyboard/mouse). Reading and meetings still count as tracked time as long as you're at your desk."
           />
           <StatCard
             title="Suspicious Activity"
