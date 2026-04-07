@@ -13,6 +13,8 @@ import aiRoutes from './routes/ai-routes.js';
 import aiLLMRoutes from './routes/ai-routes-llm.js';
 import { setupAuthRoutes } from './routes/auth-routes.js';
 import { setupOrgRoutes } from './routes/org-routes.js';
+import { setupSummaryScreenshotRoutes } from './routes/summary-screenshot-routes.js';
+import { startDailySummaryScheduler } from './daily-summary.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -101,6 +103,7 @@ async function startServer() {
     console.log('🛣️  Setting up API routes...');
     setupAuthRoutes(app);  // Auth routes first (signup/login are public)
     setupOrgRoutes(app);   // Organization settings + logo upload
+    setupSummaryScreenshotRoutes(app); // Daily summary + screenshot endpoints
     setupRoutes(app);
     app.use('/api/ai', aiRoutes);
     app.use('/api/ai-llm', aiLLMRoutes);
@@ -139,6 +142,9 @@ async function startServer() {
       }
     });
     
+    // Step 4b: Start daily summary scheduler (1-min tick).
+    startDailySummaryScheduler();
+
     // Step 5: Start listening
     server.listen(PORT, () => {
       console.log('');

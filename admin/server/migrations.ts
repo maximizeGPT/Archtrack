@@ -144,6 +144,74 @@ export async function runMigrations(db: DB): Promise<void> {
 
         console.log('  Migration 2: Org branding + currency + timezone + business hours columns added');
       }
+    },
+    {
+      version: 3,
+      name: 'screenshots + daily email summary settings + per-project rollup hooks',
+      up: async (db: DB) => {
+        // --- screenshots table (one row per captured screenshot)
+        await db.exec(`
+          CREATE TABLE IF NOT EXISTS screenshots (
+            id TEXT PRIMARY KEY,
+            org_id TEXT NOT NULL,
+            employee_id TEXT NOT NULL,
+            timestamp TEXT NOT NULL,
+            file_path TEXT NOT NULL,           -- relative path under data/uploads/screenshots/
+            file_size_bytes INTEGER DEFAULT 0,
+            width INTEGER,
+            height INTEGER,
+            app_name TEXT,                     -- foreground app at time of capture (best-effort)
+            window_title TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY (org_id) REFERENCES organizations(id),
+            FOREIGN KEY (employee_id) REFERENCES employees(id)
+          );
+          CREATE INDEX IF NOT EXISTS idx_screenshots_org_emp ON screenshots(org_id, employee_id);
+          CREATE INDEX IF NOT EXISTS idx_screenshots_timestamp ON screenshots(timestamp);
+        `);
+
+        // --- daily summary settings + screenshot policy on the organization
+        const orgCols = await db.all(`PRAGMA table_info(organizations)`);
+        const orgColNames = new Set(orgCols.map((c: any) => c.name));
+        if (!orgColNames.has('daily_summary_enabled')) {
+          await db.exec(`ALTER TABLE organizations ADD COLUMN daily_summary_enabled INTEGER DEFAULT 0`);
+        }
+        if (!orgColNames.has('daily_summary_recipient')) {
+          await db.exec(`ALTER TABLE organizations ADD COLUMN daily_summary_recipient TEXT`);
+        }
+        if (!orgColNames.has('daily_summary_hour')) {
+          // Hour-of-day in the org's local timezone, 0-23. Defaults to 18 (6pm).
+          await db.exec(`ALTER TABLE organizations ADD COLUMN daily_summary_hour INTEGER DEFAULT 18`);
+        }
+        if (!orgColNames.has('daily_summary_last_sent_date')) {
+          // YYYY-MM-DD in org tz of the last day a summary email was actually sent.
+          // Used by the cron to dedupe so a restart doesn't double-send.
+          await db.exec(`ALTER TABLE organizations ADD COLUMN daily_summary_last_sent_date TEXT`);
+        }
+        if (!orgColNames.has('screenshots_enabled')) {
+          await db.exec(`ALTER TABLE organizations ADD COLUMN screenshots_enabled INTEGER DEFAULT 0`);
+        }
+        if (!orgColNames.has('screenshot_interval_minutes')) {
+          await db.exec(`ALTER TABLE organizations ADD COLUMN screenshot_interval_minutes INTEGER DEFAULT 10`);
+        }
+        if (!orgColNames.has('screenshot_retention_days')) {
+          await db.exec(`ALTER TABLE organizations ADD COLUMN screenshot_retention_days INTEGER DEFAULT 7`);
+        }
+
+        // --- per-project rollup hooks on activities (nullable, no backfill)
+        const actCols = await db.all(`PRAGMA table_info(activities)`);
+        const actColNames = new Set(actCols.map((c: any) => c.name));
+        if (!actColNames.has('project_id')) {
+          await db.exec(`ALTER TABLE activities ADD COLUMN project_id TEXT`);
+          await db.exec(`CREATE INDEX IF NOT EXISTS idx_activities_project ON activities(project_id)`);
+        }
+        if (!actColNames.has('task_id')) {
+          await db.exec(`ALTER TABLE activities ADD COLUMN task_id TEXT`);
+          await db.exec(`CREATE INDEX IF NOT EXISTS idx_activities_task ON activities(task_id)`);
+        }
+
+        console.log('  Migration 3: Screenshots table + daily-summary settings + per-project columns added');
+      }
     }
   ];
 

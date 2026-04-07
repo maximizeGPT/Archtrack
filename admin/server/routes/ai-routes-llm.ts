@@ -1,6 +1,39 @@
 import { Router } from 'express';
 import { getDatabase } from '../database.js';
 import { detectRepetitivePatterns, getTopAgentOpportunities } from '../ai-analytics.js';
+import { computeProductivityStats } from '../../shared-types.js';
+
+/**
+ * Helper that mirrors the unified productivity formula used by the Dashboard
+ * and Reports endpoints. The Genesis AI prompt previously quoted
+ * AVG(productivity_score) which gave a different (diluted) number than what
+ * the admin saw on the Dashboard, leading to e.g. "Mohammed at 54%" while
+ * the Dashboard said 99%. Computing it here from the activity rows
+ * guarantees Genesis sees the same numbers as the human-facing pages.
+ */
+async function unifiedScoreFor(db: any, orgFilter: string, employeeFilter: string, daysBack: number): Promise<{ score: number; productiveSec: number; totalSec: number; }> {
+  const rows = await db.all(
+    `SELECT category, category_name, productivity_level, is_idle, duration_seconds
+     FROM activities a
+     WHERE timestamp > datetime('now', '-${daysBack} days')
+       ${orgFilter ? `AND ${orgFilter.replace(/^AND\s*/, '')}` : ''}
+       ${employeeFilter}`
+  );
+  const stats = computeProductivityStats(
+    rows.map((r: any) => ({
+      category: r.category,
+      categoryName: r.category_name,
+      productivityLevel: r.productivity_level,
+      isIdle: r.is_idle,
+      durationSeconds: r.duration_seconds
+    }))
+  );
+  return {
+    score: stats.productivityScore,
+    productiveSec: stats.productiveSeconds,
+    totalSec: stats.totalSeconds
+  };
+}
 
 const router = Router();
 
@@ -78,43 +111,62 @@ async function generateSystemPrompt(db: any, orgId?: string): Promise<string> {
     return `${hrs}h`;
   };
 
-  // Get current team stats
-  const stats = await db.get(`
+  // Get current team stats — count + raw seconds via SQL, but compute the
+  // PRODUCTIVITY SCORE in JS so it matches what Dashboard + Reports show.
+  const teamCounts = await db.get(`
     SELECT
       COUNT(DISTINCT employee_id) as employee_count,
       COUNT(*) as total_activities,
-      AVG(productivity_score) as avg_productivity,
       SUM(duration_seconds) as total_seconds
     FROM activities
     WHERE timestamp > datetime('now', '-7 days') ${orgFilter}
   `);
+  const team7d = await unifiedScoreFor(db, orgFilter, '', 7);
+  const stats = {
+    employee_count: teamCounts?.employee_count || 0,
+    total_activities: teamCounts?.total_activities || 0,
+    total_seconds: teamCounts?.total_seconds || 0,
+    avg_productivity: team7d.score
+  };
 
   // Get employee list
   const employees = await db.all(`SELECT name, department, hourly_rate FROM employees WHERE is_active = 1 ${orgFilter}`);
 
-  // Get recent activity summary with minutes
-  const recentActivity = await db.all(`
-    SELECT
-      e.name,
-      COUNT(*) as activities,
-      AVG(a.productivity_score) as avg_score,
-      SUM(a.duration_seconds) as total_seconds
-    FROM activities a
-    JOIN employees e ON a.employee_id = e.id
-    WHERE a.timestamp > datetime('now', '-1 day') ${orgFilterAnd}
+  // Per-employee daily summary using the unified formula. We pull the
+  // candidate employees first, then compute their score in JS.
+  const todayEmpRows = await db.all(`
+    SELECT e.id, e.name, COUNT(a.id) as activities, SUM(a.duration_seconds) as total_seconds
+    FROM employees e
+    LEFT JOIN activities a ON a.employee_id = e.id
+      AND a.timestamp > datetime('now', '-1 day')
+      ${orgFilterAnd}
+    WHERE 1=1 ${orgFilter.replace(/^AND/, 'AND e.org_id = ').replace('e.org_id = AND', 'AND')}
     GROUP BY e.id
     ORDER BY activities DESC
     LIMIT 5
   `);
+  const recentActivity: any[] = [];
+  for (const row of todayEmpRows) {
+    const empFilter = ` AND a.employee_id = '${row.id}'`;
+    const empStats = await unifiedScoreFor(db, orgFilter, empFilter, 1);
+    recentActivity.push({
+      name: row.name,
+      activities: row.activities,
+      avg_score: empStats.score,
+      total_seconds: row.total_seconds
+    });
+  }
 
-  // Get top apps by time spent
+  // Get top apps by time spent. We also pull category-aware buckets so the
+  // prompt can list each app's productive contribution honestly.
   const topApps = await db.all(`
     SELECT
       app_name,
       category_name,
       SUM(duration_seconds) as total_seconds,
-      AVG(productivity_score) as avg_score,
-      COUNT(*) as usage_count
+      COUNT(*) as usage_count,
+      SUM(CASE WHEN productivity_level = 'productive' AND is_idle = 0 THEN duration_seconds ELSE 0 END) as productive_seconds,
+      SUM(CASE WHEN productivity_level = 'unproductive' AND is_idle = 0 THEN duration_seconds ELSE 0 END) as unproductive_seconds
     FROM activities
     WHERE timestamp > datetime('now', '-7 days') ${orgFilter}
       AND app_name NOT IN ('loginwindow', 'Window Server', 'kernel', 'system', 'Finder', 'Dock')
@@ -122,6 +174,11 @@ async function generateSystemPrompt(db: any, orgId?: string): Promise<string> {
     ORDER BY total_seconds DESC
     LIMIT 10
   `);
+  // Compute the unified score (productive / (productive + unproductive)) per app.
+  for (const a of topApps) {
+    const active = (a.productive_seconds || 0) + (a.unproductive_seconds || 0);
+    a.avg_score = active > 0 ? Math.round((a.productive_seconds / active) * 100) : 0;
+  }
 
   // Get productivity breakdown by category
   const categoryBreakdown = await db.all(`
@@ -135,7 +192,7 @@ async function generateSystemPrompt(db: any, orgId?: string): Promise<string> {
     ORDER BY total_seconds DESC
   `);
 
-  // Get employee app usage patterns
+  // Get employee app usage patterns — also using the unified bucket math.
   const employeePatterns = await db.all(`
     SELECT
       e.name,
@@ -143,7 +200,8 @@ async function generateSystemPrompt(db: any, orgId?: string): Promise<string> {
       a.category_name,
       COUNT(*) as times_used,
       SUM(a.duration_seconds) as total_seconds,
-      AVG(a.productivity_score) as avg_productivity
+      SUM(CASE WHEN a.productivity_level = 'productive' AND a.is_idle = 0 THEN a.duration_seconds ELSE 0 END) as productive_seconds,
+      SUM(CASE WHEN a.productivity_level = 'unproductive' AND a.is_idle = 0 THEN a.duration_seconds ELSE 0 END) as unproductive_seconds
     FROM activities a
     JOIN employees e ON a.employee_id = e.id
     WHERE a.timestamp > datetime('now', '-7 days') ${orgFilterAnd}
@@ -153,6 +211,10 @@ async function generateSystemPrompt(db: any, orgId?: string): Promise<string> {
     ORDER BY times_used DESC
     LIMIT 15
   `);
+  for (const p of employeePatterns) {
+    const active = (p.productive_seconds || 0) + (p.unproductive_seconds || 0);
+    p.avg_productivity = active > 0 ? Math.round((p.productive_seconds / active) * 100) : 0;
+  }
 
   return `You are Genesis, an AI analytics assistant for ArchTrack — an employee productivity tracking system.
 

@@ -39,12 +39,17 @@ export function setupOrgRoutes(app: Express): void {
     fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   }
 
-  // GET /api/organization - full settings (tz, logo, default currency, name)
+  // GET /api/organization - full settings (tz, logo, default currency, name,
+  // daily summary config, screenshots config)
   app.get('/api/organization', requireAuth, async (req, res) => {
     try {
       const db = getDatabase();
       const row = await db.get(
-        `SELECT id, name, slug, timezone, logo_url, default_currency, created_at, updated_at
+        `SELECT id, name, slug, timezone, logo_url, default_currency,
+                daily_summary_enabled, daily_summary_recipient, daily_summary_hour,
+                daily_summary_last_sent_date,
+                screenshots_enabled, screenshot_interval_minutes, screenshot_retention_days,
+                created_at, updated_at
          FROM organizations WHERE id = ?`,
         [req.orgId!]
       );
@@ -58,6 +63,13 @@ export function setupOrgRoutes(app: Express): void {
           timezone: resolveTimezone(row.timezone),
           logoUrl: row.logo_url || null,
           defaultCurrency: row.default_currency || 'USD',
+          dailySummaryEnabled: row.daily_summary_enabled === 1,
+          dailySummaryRecipient: row.daily_summary_recipient || '',
+          dailySummaryHour: typeof row.daily_summary_hour === 'number' ? row.daily_summary_hour : 18,
+          dailySummaryLastSentDate: row.daily_summary_last_sent_date || null,
+          screenshotsEnabled: row.screenshots_enabled === 1,
+          screenshotIntervalMinutes: typeof row.screenshot_interval_minutes === 'number' ? row.screenshot_interval_minutes : 10,
+          screenshotRetentionDays: typeof row.screenshot_retention_days === 'number' ? row.screenshot_retention_days : 7,
           createdAt: row.created_at,
           updatedAt: row.updated_at
         }
@@ -67,10 +79,14 @@ export function setupOrgRoutes(app: Express): void {
     }
   });
 
-  // PUT /api/organization - update name / timezone / default currency
+  // PUT /api/organization - update any of the settings (all optional).
   app.put('/api/organization', requireAuth, async (req, res) => {
     try {
-      const { name, timezone, defaultCurrency } = req.body || {};
+      const {
+        name, timezone, defaultCurrency,
+        dailySummaryEnabled, dailySummaryRecipient, dailySummaryHour,
+        screenshotsEnabled, screenshotIntervalMinutes, screenshotRetentionDays
+      } = req.body || {};
       const sets: string[] = [];
       const values: any[] = [];
 
@@ -83,6 +99,28 @@ export function setupOrgRoutes(app: Express): void {
       }
       if (typeof defaultCurrency === 'string' && /^[A-Z]{3}$/.test(defaultCurrency)) {
         sets.push('default_currency = ?'); values.push(defaultCurrency);
+      }
+      if (typeof dailySummaryEnabled === 'boolean') {
+        sets.push('daily_summary_enabled = ?'); values.push(dailySummaryEnabled ? 1 : 0);
+      }
+      if (typeof dailySummaryRecipient === 'string') {
+        const trimmed = dailySummaryRecipient.trim();
+        if (trimmed && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+          return res.status(400).json({ success: false, error: 'dailySummaryRecipient must be a valid email' });
+        }
+        sets.push('daily_summary_recipient = ?'); values.push(trimmed || null);
+      }
+      if (typeof dailySummaryHour === 'number' && dailySummaryHour >= 0 && dailySummaryHour <= 23) {
+        sets.push('daily_summary_hour = ?'); values.push(Math.floor(dailySummaryHour));
+      }
+      if (typeof screenshotsEnabled === 'boolean') {
+        sets.push('screenshots_enabled = ?'); values.push(screenshotsEnabled ? 1 : 0);
+      }
+      if (typeof screenshotIntervalMinutes === 'number' && screenshotIntervalMinutes >= 1 && screenshotIntervalMinutes <= 60) {
+        sets.push('screenshot_interval_minutes = ?'); values.push(Math.floor(screenshotIntervalMinutes));
+      }
+      if (typeof screenshotRetentionDays === 'number' && screenshotRetentionDays >= 1 && screenshotRetentionDays <= 365) {
+        sets.push('screenshot_retention_days = ?'); values.push(Math.floor(screenshotRetentionDays));
       }
 
       if (sets.length === 0) {
@@ -99,7 +137,10 @@ export function setupOrgRoutes(app: Express): void {
       );
 
       const row = await db.get(
-        `SELECT id, name, slug, timezone, logo_url, default_currency FROM organizations WHERE id = ?`,
+        `SELECT id, name, slug, timezone, logo_url, default_currency,
+                daily_summary_enabled, daily_summary_recipient, daily_summary_hour,
+                screenshots_enabled, screenshot_interval_minutes, screenshot_retention_days
+         FROM organizations WHERE id = ?`,
         [req.orgId!]
       );
       res.json({
@@ -110,7 +151,13 @@ export function setupOrgRoutes(app: Express): void {
           slug: row.slug,
           timezone: resolveTimezone(row.timezone),
           logoUrl: row.logo_url || null,
-          defaultCurrency: row.default_currency || 'USD'
+          defaultCurrency: row.default_currency || 'USD',
+          dailySummaryEnabled: row.daily_summary_enabled === 1,
+          dailySummaryRecipient: row.daily_summary_recipient || '',
+          dailySummaryHour: typeof row.daily_summary_hour === 'number' ? row.daily_summary_hour : 18,
+          screenshotsEnabled: row.screenshots_enabled === 1,
+          screenshotIntervalMinutes: typeof row.screenshot_interval_minutes === 'number' ? row.screenshot_interval_minutes : 10,
+          screenshotRetentionDays: typeof row.screenshot_retention_days === 'number' ? row.screenshot_retention_days : 7
         }
       });
     } catch (error) {
