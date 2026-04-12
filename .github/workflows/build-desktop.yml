@@ -8,6 +8,8 @@ on:
 jobs:
   build-mac:
     runs-on: macos-latest
+    env:
+      BUILD_DIR: ${{ github.workspace }}/../archtrack-build
     steps:
       - uses: actions/checkout@v4
 
@@ -17,19 +19,18 @@ jobs:
 
       - name: Prepare standalone build dir
         run: |
-          mkdir -p /tmp/archtrack-build
-          cp -R desktop/. /tmp/archtrack-build/
-          cp -R shared /tmp/archtrack-shared
-          rm -rf /tmp/archtrack-build/node_modules /tmp/archtrack-build/release
+          mkdir -p "$BUILD_DIR"
+          cp -R desktop/. "$BUILD_DIR/"
+          rm -rf "$BUILD_DIR/node_modules" "$BUILD_DIR/release"
 
       - name: Install deps and build
-        working-directory: /tmp/archtrack-build
+        working-directory: ${{ env.BUILD_DIR }}
         run: |
           npm install
           npm run build
 
       - name: Upscale icon if needed
-        working-directory: /tmp/archtrack-build
+        working-directory: ${{ env.BUILD_DIR }}
         run: |
           WIDTH=$(sips -g pixelWidth assets/icon.png | tail -1 | awk '{print $2}')
           if [ "$WIDTH" -lt 512 ]; then
@@ -37,15 +38,16 @@ jobs:
           fi
 
       - name: Package Mac app
-        working-directory: /tmp/archtrack-build
+        working-directory: ${{ env.BUILD_DIR }}
         run: npm run dist:mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Re-sign with correct identifier
-        working-directory: /tmp/archtrack-build
+        working-directory: ${{ env.BUILD_DIR }}
         run: |
           for dir in release/mac-arm64/ArchTrack.app release/mac/ArchTrack.app; do
             if [ -d "$dir" ]; then
-              # Sign everything inside-out: binaries, dylibs, frameworks, helper apps, main app
               find "$dir" -type f -perm +111 -path "*/Frameworks/*" -exec codesign --force --sign - {} \; 2>/dev/null || true
               find "$dir/Contents/Frameworks" -name "*.dylib" -exec codesign --force --sign - {} \; 2>/dev/null || true
               find "$dir/Contents/Frameworks" -name "*.framework" -exec codesign --force --sign - {} \; 2>/dev/null || true
@@ -59,11 +61,13 @@ jobs:
         with:
           name: mac-builds
           path: |
-            /tmp/archtrack-build/release/ArchTrack-*.dmg
-            /tmp/archtrack-build/release/ArchTrack-*-mac.zip
+            ${{ env.BUILD_DIR }}/release/ArchTrack-*.dmg
+            ${{ env.BUILD_DIR }}/release/ArchTrack-*-mac.zip
 
   build-windows:
     runs-on: windows-latest
+    env:
+      BUILD_DIR: ${{ github.workspace }}\..\archtrack-build
     steps:
       - uses: actions/checkout@v4
 
@@ -74,13 +78,14 @@ jobs:
       - name: Prepare standalone build dir
         shell: bash
         run: |
-          mkdir -p /tmp/archtrack-build
-          cp -R desktop/. /tmp/archtrack-build/
-          cp -R shared /tmp/archtrack-shared
-          rm -rf /tmp/archtrack-build/node_modules /tmp/archtrack-build/release
+          BUILD_DIR="${GITHUB_WORKSPACE}/../archtrack-build"
+          mkdir -p "$BUILD_DIR"
+          cp -R desktop/. "$BUILD_DIR/"
+          rm -rf "$BUILD_DIR/node_modules" "$BUILD_DIR/release"
 
       - name: Install deps, build, and package
-        working-directory: /tmp/archtrack-build
+        shell: bash
+        working-directory: ${{ env.BUILD_DIR }}
         run: |
           npm install
           npm run dist:win
@@ -89,7 +94,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows-builds
-          path: /tmp/archtrack-build/release/ArchTrack*.exe
+          path: ${{ env.BUILD_DIR }}/release/ArchTrack*.exe
 
   release:
     needs: [build-mac, build-windows]
