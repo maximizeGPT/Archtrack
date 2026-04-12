@@ -15,23 +15,35 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies
-        working-directory: desktop
+      - name: Build TypeScript (in workspace)
+        run: |
+          npm install
+          cd desktop && npm run build
+
+      - name: Copy desktop to standalone dir for packaging
+        run: |
+          mkdir -p /tmp/archtrack-build
+          cp -R desktop/. /tmp/archtrack-build/
+          rm -rf /tmp/archtrack-build/node_modules /tmp/archtrack-build/release
+
+      - name: Install standalone deps
+        working-directory: /tmp/archtrack-build
         run: npm install
 
-      - name: Upscale icon to 1024x1024
-        working-directory: desktop
+      - name: Upscale icon if needed
+        working-directory: /tmp/archtrack-build
         run: |
-          if [ "$(sips -g pixelWidth assets/icon.png | tail -1 | awk '{print $2}')" -lt 512 ]; then
+          WIDTH=$(sips -g pixelWidth assets/icon.png | tail -1 | awk '{print $2}')
+          if [ "$WIDTH" -lt 512 ]; then
             sips -z 1024 1024 assets/icon.png --out assets/icon.png
           fi
 
-      - name: Build and package
-        working-directory: desktop
+      - name: Package Mac app
+        working-directory: /tmp/archtrack-build
         run: npm run dist:mac
 
       - name: Re-sign with correct identifier
-        working-directory: desktop
+        working-directory: /tmp/archtrack-build
         run: |
           for dir in release/mac-arm64/ArchTrack.app release/mac/ArchTrack.app; do
             if [ -d "$dir" ]; then
@@ -46,8 +58,8 @@ jobs:
         with:
           name: mac-builds
           path: |
-            desktop/release/ArchTrack-*.dmg
-            desktop/release/ArchTrack-*-mac.zip
+            /tmp/archtrack-build/release/ArchTrack-*.dmg
+            /tmp/archtrack-build/release/ArchTrack-*-mac.zip
 
   build-windows:
     runs-on: windows-latest
@@ -58,19 +70,32 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies
-        working-directory: desktop
+      - name: Build TypeScript (in workspace)
+        run: |
+          npm install
+          cd desktop
+          npm run build
+
+      - name: Copy desktop to standalone dir for packaging
+        shell: bash
+        run: |
+          mkdir -p /tmp/archtrack-build
+          cp -R desktop/. /tmp/archtrack-build/
+          rm -rf /tmp/archtrack-build/node_modules /tmp/archtrack-build/release
+
+      - name: Install standalone deps
+        working-directory: /tmp/archtrack-build
         run: npm install
 
-      - name: Build and package
-        working-directory: desktop
+      - name: Package Windows app
+        working-directory: /tmp/archtrack-build
         run: npm run dist:win
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-builds
-          path: desktop/release/ArchTrack*.exe
+          path: /tmp/archtrack-build/release/ArchTrack*.exe
 
   release:
     needs: [build-mac, build-windows]
