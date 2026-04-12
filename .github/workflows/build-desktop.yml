@@ -8,8 +8,6 @@ on:
 jobs:
   build-mac:
     runs-on: macos-latest
-    env:
-      BUILD_DIR: ${{ github.workspace }}/../archtrack-build
     steps:
       - uses: actions/checkout@v4
 
@@ -19,32 +17,24 @@ jobs:
 
       - name: Prepare standalone build dir
         run: |
-          mkdir -p "$BUILD_DIR"
-          cp -R desktop/. "$BUILD_DIR/"
-          rm -rf "$BUILD_DIR/node_modules" "$BUILD_DIR/release"
+          mkdir -p "$RUNNER_TEMP/archtrack-build"
+          cp -R desktop/. "$RUNNER_TEMP/archtrack-build/"
+          rm -rf "$RUNNER_TEMP/archtrack-build/node_modules" "$RUNNER_TEMP/archtrack-build/release"
 
       - name: Install deps and build
-        working-directory: ${{ env.BUILD_DIR }}
+        working-directory: ${{ runner.temp }}/archtrack-build
         run: |
           npm install
           npm run build
 
-      - name: Upscale icon if needed
-        working-directory: ${{ env.BUILD_DIR }}
-        run: |
-          WIDTH=$(sips -g pixelWidth assets/icon.png | tail -1 | awk '{print $2}')
-          if [ "$WIDTH" -lt 512 ]; then
-            sips -z 1024 1024 assets/icon.png --out assets/icon.png
-          fi
-
       - name: Package Mac app
-        working-directory: ${{ env.BUILD_DIR }}
+        working-directory: ${{ runner.temp }}/archtrack-build
         run: npm run dist:mac
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Re-sign with correct identifier
-        working-directory: ${{ env.BUILD_DIR }}
+        working-directory: ${{ runner.temp }}/archtrack-build
         run: |
           for dir in release/mac-arm64/ArchTrack.app release/mac/ArchTrack.app; do
             if [ -d "$dir" ]; then
@@ -56,18 +46,21 @@ jobs:
             fi
           done
 
+      - name: Copy artifacts to workspace
+        run: |
+          mkdir -p release
+          cp "$RUNNER_TEMP"/archtrack-build/release/ArchTrack-*.dmg release/ 2>/dev/null || true
+          cp "$RUNNER_TEMP"/archtrack-build/release/ArchTrack-*-mac.zip release/ 2>/dev/null || true
+          ls -lh release/
+
       - name: Upload Mac artifacts
         uses: actions/upload-artifact@v4
         with:
           name: mac-builds
-          path: |
-            ${{ env.BUILD_DIR }}/release/ArchTrack-*.dmg
-            ${{ env.BUILD_DIR }}/release/ArchTrack-*-mac.zip
+          path: release/
 
   build-windows:
     runs-on: windows-latest
-    env:
-      BUILD_DIR: ${{ github.workspace }}\..\archtrack-build
     steps:
       - uses: actions/checkout@v4
 
@@ -78,23 +71,29 @@ jobs:
       - name: Prepare standalone build dir
         shell: bash
         run: |
-          BUILD_DIR="${GITHUB_WORKSPACE}/../archtrack-build"
-          mkdir -p "$BUILD_DIR"
-          cp -R desktop/. "$BUILD_DIR/"
-          rm -rf "$BUILD_DIR/node_modules" "$BUILD_DIR/release"
+          mkdir -p "$RUNNER_TEMP/archtrack-build"
+          cp -R desktop/. "$RUNNER_TEMP/archtrack-build/"
+          rm -rf "$RUNNER_TEMP/archtrack-build/node_modules" "$RUNNER_TEMP/archtrack-build/release"
 
       - name: Install deps, build, and package
         shell: bash
-        working-directory: ${{ env.BUILD_DIR }}
+        working-directory: ${{ runner.temp }}/archtrack-build
         run: |
           npm install
           npm run dist:win
+
+      - name: Copy artifacts to workspace
+        shell: bash
+        run: |
+          mkdir -p release
+          cp "$RUNNER_TEMP"/archtrack-build/release/ArchTrack*.exe release/ 2>/dev/null || true
+          ls -lh release/
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-builds
-          path: ${{ env.BUILD_DIR }}/release/ArchTrack*.exe
+          path: release/
 
   release:
     needs: [build-mac, build-windows]
