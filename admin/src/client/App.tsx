@@ -13,6 +13,7 @@ import { Login } from './pages/Login';
 import { Signup } from './pages/Signup';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
+import { Download } from './pages/Download';
 import { GenesisAI } from './components/GenesisAI';
 import { OrgSettingsModal } from './components/OrgSettingsModal';
 import { WebSocketProvider } from './contexts/WebSocketContext';
@@ -443,6 +444,10 @@ const App: React.FC = () => (
                 <ResetPassword />
               </PublicRoute>
             }
+          />
+          <Route
+            path="/download"
+            element={<Download />}
           />
           <Route
             path="/*"

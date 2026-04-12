@@ -284,16 +284,14 @@ async function checkActivity(): Promise<void> {
       isFullscreen: false
     });
 
-    // Duration this sample represents = time since the END of the previous
-    // recorded activity (its timestamp + its own durationSeconds), capped so
-    // a single sample can't inflate into minutes. Without the cap, a suspend
-    // gap would double-count with the idle backfill above; without the
-    // "end time" adjustment, each heartbeat would only count the 10s poll
-    // interval and an honest 60-min session showed up as ~10 min.
-    const lastEndMs = lastActivity
-      ? new Date(lastActivity.timestamp).getTime() + (lastActivity.durationSeconds || 0) * 1000
+    // Duration = time since the previous record's timestamp, capped at 90s.
+    // The cap prevents double-counting with the idle backfill above (which
+    // already covers gaps > 120s). Using the previous record's timestamp
+    // (not its end) ensures no time is lost between rapid window switches.
+    const lastTs = lastActivity
+      ? new Date(lastActivity.timestamp).getTime()
       : now - timeSinceLastCheck * 1000;
-    const gapSec = Math.min(Math.max(Math.round((now - lastEndMs) / 1000), 1), 90);
+    const gapSec = Math.min(Math.max(Math.round((now - lastTs) / 1000), 1), 90);
 
     // Create the activity record
     const activity: TrackedActivity = {

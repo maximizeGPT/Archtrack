@@ -575,20 +575,45 @@ export const Employees: React.FC = () => {
                 The token expires in 7 days and can only be used once.
               </p>
             </div>
-            <a
-              href="https://github.com/maximizeGPT/Archtrack#3-install-the-desktop-tracker"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'inline-block',
-                fontSize: '13px',
-                color: '#3498db',
-                fontWeight: 500,
-                textDecoration: 'none',
-              }}
-            >
-              View setup instructions on GitHub &rarr;
-            </a>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' as const }}>
+              <a
+                href="/download"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '10px 16px',
+                  backgroundColor: '#27ae60',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  fontWeight: 500,
+                  textDecoration: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                ⬇ Download Tracker App
+              </a>
+              <a
+                href="https://github.com/maximizeGPT/Archtrack#3-install-the-desktop-tracker"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  fontSize: '13px',
+                  color: '#3498db',
+                  fontWeight: 500,
+                  textDecoration: 'none',
+                  padding: '10px 16px',
+                }}
+              >
+                Setup instructions &rarr;
+              </a>
+            </div>
           </div>
         </div>
       )}
