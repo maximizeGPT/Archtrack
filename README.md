@@ -36,13 +36,20 @@ Go to **Employees** > **+ Add Employee**. Add each team member with their name, 
 
 For each employee, click the **Setup Token** button next to their name. This generates a one-time setup code.
 
-On the employee's computer (Mac), install [Node.js](https://nodejs.org) if they don't have it, then run:
+#### Option A: Download the pre-built app (recommended for employees)
 
-```bash
-git clone https://github.com/maximizeGPT/Archtrack.git
-cd Archtrack/desktop
-npm install
-```
+Download the latest DMG (Mac) or EXE installer (Windows) from [GitHub Releases](https://github.com/maximizeGPT/Archtrack/releases).
+
+**macOS:**
+1. Open the `.dmg`, drag **ArchTrack** to Applications
+2. Right-click → **Open** → **Open Anyway** (required once for unsigned apps)
+3. macOS will prompt for **Screen Recording** and **Accessibility** — grant both
+4. ArchTrack runs silently in the background (no Dock icon, no menu bar)
+
+**Windows:**
+1. Run the `.exe` installer, follow the wizard
+2. ArchTrack starts automatically — no permission prompts needed
+3. SmartScreen may show "Windows protected your PC" on first run — click **More info → Run anyway**
 
 Enroll the tracker with the setup token from the dashboard:
 ```bash
@@ -54,71 +61,60 @@ curl -X POST https://archtrack.live/api/auth/enroll \
 
 Save the returned `accessToken` to the config file:
 ```bash
+# macOS
 mkdir -p ~/Library/Application\ Support/@archtrack/desktop
 echo '{"deviceToken":"PASTE_ACCESS_TOKEN_HERE","serverUrl":"https://archtrack.live"}' > ~/Library/Application\ Support/@archtrack/desktop/config.json
 ```
 
-Start the tracker:
+ArchTrack auto-starts on login. To verify it's running, check the dashboard — you should see the employee appear within 60 seconds.
+
+> See **[Desktop Tracker Permissions](#desktop-tracker-permissions)** below for details on what each OS needs.
+
+#### Option B: Build from source (for developers)
+
+If you want to build the tracker yourself or make changes:
+
+```bash
+git clone https://github.com/maximizeGPT/Archtrack.git
+cd Archtrack/desktop
+npm install
+```
+
+**Run in dev mode:**
 ```bash
 npx electron .
 ```
 
-> See **[Desktop Tracker Permissions](#desktop-tracker-permissions)** below for what each OS needs on first run.
-
-#### Auto-start the tracker on login (recommended)
-
-Laptops sleep when their lid closes. If the tracker isn't configured to
-auto-start on login + auto-restart on wake, you'll see large gaps in the
-activity feed (we caught a 9h 45m gap on a real workday before fixing this).
-
-**macOS — launchd agent:**
+**Build a distributable app:**
 ```bash
-cd Archtrack/desktop
-./install-autostart-mac.sh           # normal mode (visible in dock)
-./install-autostart-mac.sh --stealth  # stealth mode (no dock, no tray)
+npm run dist:mac    # builds DMG + ZIP for macOS (arm64 + x64)
+npm run dist:win    # builds Windows installer (x64)
+npm run dist:all    # both platforms
 ```
-The script writes `~/Library/LaunchAgents/com.archtrack.tracker.plist` and
-loads it. Tracker now launches at login and restarts automatically after a
-crash or wake-from-sleep.
 
-> ⚠️ **macOS TCC restriction:** if your Archtrack folder lives under
-> `~/Desktop`, `~/Documents`, or `~/Downloads`, macOS blocks launchd-spawned
-> processes from reading files there until you grant Full Disk Access to
-> the Electron binary. The install script prints the exact path. Easiest
-> fix: move the repo to a non-protected location like
-> `~/Library/Application Support/ArchTrack`.
+Build output goes to `desktop/release/`.
 
-**Windows — Scheduled Task:**
+> **Note for monorepo builds:** the repo uses npm workspaces which can
+> conflict with electron-builder's production install step. If the build
+> fails, copy the `desktop/` folder to a standalone directory, run
+> `npm install` there, then `npm run dist:mac`.
+
+After building, re-sign the macOS app so Accessibility/Screen Recording permissions persist across restarts:
+```bash
+# Sign all nested frameworks, then the main app
+find release/mac-arm64/ArchTrack.app/Contents/Frameworks -name "*.framework" -exec codesign --force --sign - {} \;
+find release/mac-arm64/ArchTrack.app/Contents/Frameworks -name "*.app" -exec codesign --force --sign - {} \;
+codesign --force --sign - --identifier live.archtrack.tracker release/mac-arm64/ArchTrack.app
+```
+
+#### Auto-start on login
+
+**macOS:** ArchTrack.app registers as a Login Item automatically. You can also add it manually: System Settings → General → Login Items → add ArchTrack.
+
+**Windows:** The NSIS installer creates a Start Menu shortcut. To add auto-start, the installer places a Scheduled Task or you can add ArchTrack to Startup:
 ```powershell
 cd Archtrack\desktop
 powershell -ExecutionPolicy Bypass -File install-autostart-windows.ps1
-# Add -Stealth to hide the tracker
-```
-
-#### Rebuilding your local tracker after an ArchTrack update
-
-The tracker is a regular Node/Electron app — it does **not** auto-update
-when you `git pull` the repo. Server-side fixes (like the bug where Wix
-admin pages got tagged as social media because `x.com` was a substring of
-`wix.com`) ship to archtrack.live immediately, but the desktop tracker
-keeps running its old build until you rebuild it.
-
-After every `git pull`:
-```bash
-cd Archtrack
-npm install              # in case shared/ added a new dep
-cd desktop
-npm install              # in case desktop/ added a new dep
-killall Electron          # mac
-# or: taskkill /IM electron.exe /F  # windows
-npx electron .           # restart with the new build
-```
-
-If you installed the launchd autostart agent above, just unload + reload
-it instead:
-```bash
-launchctl unload ~/Library/LaunchAgents/com.archtrack.tracker.plist
-launchctl load ~/Library/LaunchAgents/com.archtrack.tracker.plist
 ```
 
 Symptoms that you're running an old tracker build: missing screenshots
@@ -154,27 +150,27 @@ employee will need to grant a small set of permissions.
 
 ### macOS (10.15 Catalina and newer)
 
-macOS requires two permissions, both granted from **System Settings → Privacy
-& Security**:
+macOS requires two permissions on first launch, both granted from
+**System Settings → Privacy & Security**:
 
-1. **Screen Recording** — lets the tracker read the active window title.
-   Without this, the tracker only sees the app bundle ID and every window
-   will look the same. When you first run `npx electron .` macOS will prompt
-   you; click **Open System Settings** and enable **ArchTrack** (or
-   **Electron** during dev).
-   - Settings path: **Privacy & Security → Screen Recording → toggle on
-     ArchTrack**.
-   - After toggling, macOS asks you to quit and relaunch the app.
-2. **Accessibility** *(optional, recommended)* — only needed if you want
-   idle-detection to read keyboard/mouse activity. Skip it if you just want
-   window-title tracking.
+1. **Screen & System Audio Recording** — lets the tracker capture periodic
+   screenshots. On first launch, macOS prompts automatically. Click
+   **Open System Settings** and toggle on **ArchTrack**.
+   - Settings path: **Privacy & Security → Screen & System Audio Recording
+     → toggle on ArchTrack**.
+2. **Accessibility** — lets the tracker read the active window title via
+   the `active-win` library. Without this, activity shows as "Unknown".
    - Settings path: **Privacy & Security → Accessibility → toggle on
      ArchTrack**.
 
-> ⚠️ **Ventura and later** hide the Screen Recording prompt until the tracker
-> actually tries to capture a frame, so you may need to click around a bit
-> before the prompt appears. If it doesn't, open System Settings manually and
-> add ArchTrack yourself with the **+** button.
+Both prompts appear once on first launch. The packaged app is signed with
+a stable bundle ID (`live.archtrack.tracker`), so permissions survive
+restarts and app updates.
+
+> ⚠️ **If you build from source**, re-sign the app after building (see
+> "Build from source" above). Without re-signing, macOS may re-prompt for
+> permissions on every restart because the code signature identifier
+> defaults to "Electron".
 
 ### Windows (10 and newer)
 

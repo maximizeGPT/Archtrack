@@ -1,4 +1,4 @@
-import { app, Tray, Menu, nativeImage, ipcMain } from 'electron';
+import { app, Tray, Menu, nativeImage, ipcMain, powerSaveBlocker } from 'electron';
 import Store from 'electron-store';
 import { startTracking, getTrackingStatus, setupIpcHandlers } from './tracker.js';
 import { ARCHTRACK_CONFIG, getServerUrl } from './config.js';
@@ -25,8 +25,22 @@ const STEALTH_MODE =
   store.get('stealthMode') === true;
 
 let tray: Tray | null = null;
+// Hold a reference so the powerSaveBlocker isn't garbage-collected.
+// Without this, macOS App Nap throttles background timers (setInterval)
+// when the app has no visible window — sync/screenshot loops freeze
+// indefinitely. Required for headless / LSUIElement builds.
+let powerSaveBlockerId: number | null = null;
 
 app.whenReady().then(async () => {
+  // Block App Nap and idle suspension on macOS. Safe no-op on Windows/Linux.
+  // 'prevent-app-suspension' lets the screen sleep but keeps the app's
+  // timers running, which is exactly what a background tracker needs.
+  try {
+    powerSaveBlockerId = powerSaveBlocker.start('prevent-app-suspension');
+  } catch (e) {
+    console.warn('[main] powerSaveBlocker failed to start:', (e as Error).message);
+  }
+
   if (!STEALTH_MODE) {
     console.log('╔════════════════════════════════════════╗');
     console.log('║     ArchTrack Auto-Tracker v2.1        ║');

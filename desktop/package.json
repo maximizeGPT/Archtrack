@@ -2,12 +2,76 @@
   "name": "@archtrack/desktop",
   "version": "1.0.0",
   "description": "Desktop activity tracker for ArchTrack",
+  "author": "ArchTrack <support@archtrack.live>",
   "type": "module",
+  "electronVersion": "30.5.1",
   "scripts": {
     "dev": "tsc && electron .",
     "build": "tsc && vite build",
     "start": "npm run build && electron .",
-    "dist": "npm run build && electron-builder"
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac --publish never",
+    "dist:win": "npm run build && electron-builder --win --publish never",
+    "dist:all": "npm run build && electron-builder -mw --publish never",
+    "release": "npm run build && electron-builder -mw --publish always"
+  },
+  "build": {
+    "appId": "live.archtrack.tracker",
+    "productName": "ArchTrack",
+    "copyright": "Copyright © 2026 ArchTrack",
+    "electronVersion": "30.5.1",
+    "directories": {
+      "output": "release",
+      "buildResources": "assets"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      { "from": "assets", "to": "assets" }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        { "target": "dmg", "arch": ["arm64", "x64"] },
+        { "target": "zip", "arch": ["arm64", "x64"] }
+      ],
+      "icon": "assets/icon.png",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "identity": null,
+      "extendInfo": {
+        "NSScreenCaptureUsageDescription": "ArchTrack captures periodic screenshots so your team admin can review work activity.",
+        "NSAppleEventsUsageDescription": "ArchTrack reads the active window title to track which apps are in use.",
+        "LSUIElement": true
+      }
+    },
+    "dmg": {
+      "title": "ArchTrack ${version}",
+      "icon": "assets/icon.png"
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "assets/icon.png",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "ArchTrack"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "maximizeGPT",
+      "repo": "Archtrack",
+      "releaseType": "release"
+    }
   },
   "dependencies": {
     "active-win": "^8.2.1",
@@ -30,5 +94,5 @@
     "vite-plugin-electron-renderer": "^0.14.5",
     "wait-on": "^7.2.0"
   },
-  "main": "dist/main.js"
+  "main": "dist/main.cjs"
 }
