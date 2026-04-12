@@ -15,20 +15,18 @@ jobs:
         with:
           node-version: 20
 
-      - name: Build TypeScript (in workspace)
-        run: |
-          npm install
-          cd desktop && npm run build
-
-      - name: Copy desktop to standalone dir for packaging
+      - name: Prepare standalone build dir
         run: |
           mkdir -p /tmp/archtrack-build
           cp -R desktop/. /tmp/archtrack-build/
+          cp -R shared /tmp/archtrack-shared
           rm -rf /tmp/archtrack-build/node_modules /tmp/archtrack-build/release
 
-      - name: Install standalone deps
+      - name: Install deps and build
         working-directory: /tmp/archtrack-build
-        run: npm install
+        run: |
+          npm install
+          npm run build
 
       - name: Upscale icon if needed
         working-directory: /tmp/archtrack-build
@@ -47,8 +45,11 @@ jobs:
         run: |
           for dir in release/mac-arm64/ArchTrack.app release/mac/ArchTrack.app; do
             if [ -d "$dir" ]; then
-              find "$dir/Contents/Frameworks" -name "*.framework" -exec codesign --force --sign - {} \;
-              find "$dir/Contents/Frameworks" -name "*.app" -exec codesign --force --sign - {} \;
+              # Sign everything inside-out: binaries, dylibs, frameworks, helper apps, main app
+              find "$dir" -type f -perm +111 -path "*/Frameworks/*" -exec codesign --force --sign - {} \; 2>/dev/null || true
+              find "$dir/Contents/Frameworks" -name "*.dylib" -exec codesign --force --sign - {} \; 2>/dev/null || true
+              find "$dir/Contents/Frameworks" -name "*.framework" -exec codesign --force --sign - {} \; 2>/dev/null || true
+              find "$dir/Contents/Frameworks" -name "*.app" -exec codesign --force --sign - {} \; 2>/dev/null || true
               codesign --force --sign - --identifier live.archtrack.tracker "$dir"
             fi
           done
@@ -70,26 +71,19 @@ jobs:
         with:
           node-version: 20
 
-      - name: Build TypeScript (in workspace)
-        run: |
-          npm install
-          cd desktop
-          npm run build
-
-      - name: Copy desktop to standalone dir for packaging
+      - name: Prepare standalone build dir
         shell: bash
         run: |
           mkdir -p /tmp/archtrack-build
           cp -R desktop/. /tmp/archtrack-build/
+          cp -R shared /tmp/archtrack-shared
           rm -rf /tmp/archtrack-build/node_modules /tmp/archtrack-build/release
 
-      - name: Install standalone deps
+      - name: Install deps, build, and package
         working-directory: /tmp/archtrack-build
-        run: npm install
-
-      - name: Package Windows app
-        working-directory: /tmp/archtrack-build
-        run: npm run dist:win
+        run: |
+          npm install
+          npm run dist:win
 
       - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
