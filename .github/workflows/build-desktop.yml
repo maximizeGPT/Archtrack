@@ -1,0 +1,90 @@
+name: Build Desktop Tracker
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: desktop
+        run: npm install
+
+      - name: Upscale icon to 1024x1024
+        working-directory: desktop
+        run: |
+          if [ "$(sips -g pixelWidth assets/icon.png | tail -1 | awk '{print $2}')" -lt 512 ]; then
+            sips -z 1024 1024 assets/icon.png --out assets/icon.png
+          fi
+
+      - name: Build and package
+        working-directory: desktop
+        run: npm run dist:mac
+
+      - name: Re-sign with correct identifier
+        working-directory: desktop
+        run: |
+          for dir in release/mac-arm64/ArchTrack.app release/mac/ArchTrack.app; do
+            if [ -d "$dir" ]; then
+              find "$dir/Contents/Frameworks" -name "*.framework" -exec codesign --force --sign - {} \;
+              find "$dir/Contents/Frameworks" -name "*.app" -exec codesign --force --sign - {} \;
+              codesign --force --sign - --identifier live.archtrack.tracker "$dir"
+            fi
+          done
+
+      - name: Upload Mac artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-builds
+          path: |
+            desktop/release/ArchTrack-*.dmg
+            desktop/release/ArchTrack-*-mac.zip
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        working-directory: desktop
+        run: npm install
+
+      - name: Build and package
+        working-directory: desktop
+        run: npm run dist:win
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-builds
+          path: desktop/release/ArchTrack*.exe
+
+  release:
+    needs: [build-mac, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            mac-builds/*
+            windows-builds/*
