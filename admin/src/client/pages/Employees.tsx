@@ -120,11 +120,7 @@ export const Employees: React.FC = () => {
       setFormError('Name is required');
       return;
     }
-    if (!formData.email.trim()) {
-      setFormError('Email is required');
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       setFormError('Please enter a valid email address');
       return;
     }
@@ -325,14 +321,13 @@ export const Employees: React.FC = () => {
                 />
               </div>
               <div style={styles.inputGroup}>
-                <label style={styles.label}>Email *</label>
+                <label style={styles.label}>Email</label>
                 <input
                   type="email"
-                  placeholder="e.g. john@company.com"
+                  placeholder="e.g. john@company.com (optional)"
                   value={formData.email}
                   onChange={e => setFormData({...formData, email: e.target.value})}
                   style={styles.input}
-                  required
                 />
               </div>
               <div style={styles.inputGroup}>

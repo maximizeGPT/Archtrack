@@ -212,6 +212,47 @@ export async function runMigrations(db: DB): Promise<void> {
 
         console.log('  Migration 3: Screenshots table + daily-summary settings + per-project columns added');
       }
+    },
+    {
+      version: 4,
+      name: 'make employee email optional + add job_type column',
+      up: async (db: DB) => {
+        // SQLite can't ALTER COLUMN, so rebuild the table to drop NOT NULL on email
+        await db.exec(`
+          CREATE TABLE employees_new (
+            id TEXT PRIMARY KEY,
+            org_id TEXT,
+            name TEXT NOT NULL,
+            email TEXT,
+            role TEXT NOT NULL DEFAULT 'employee',
+            department TEXT,
+            hourly_rate REAL,
+            currency TEXT,
+            timezone TEXT,
+            business_hours_start TEXT,
+            business_hours_end TEXT,
+            business_hours_days TEXT,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            job_type TEXT DEFAULT 'auto-detect'
+          );
+          INSERT INTO employees_new (
+            id, org_id, name, email, role, department, hourly_rate, currency, timezone,
+            business_hours_start, business_hours_end, business_hours_days,
+            is_active, created_at, updated_at
+          )
+          SELECT
+            id, org_id, name, email, role, department, hourly_rate, currency, timezone,
+            business_hours_start, business_hours_end, business_hours_days,
+            is_active, created_at, updated_at
+          FROM employees;
+          DROP TABLE employees;
+          ALTER TABLE employees_new RENAME TO employees;
+          CREATE INDEX IF NOT EXISTS idx_employees_org ON employees(org_id);
+        `);
+        console.log('  Migration 4: Employee email is now optional, job_type column added');
+      }
     }
   ];
 

@@ -51,7 +51,7 @@ async function createTables(): Promise<void> {
     CREATE TABLE IF NOT EXISTS employees (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      email TEXT NOT NULL UNIQUE,
+      email TEXT,
       role TEXT NOT NULL DEFAULT 'employee',
       department TEXT,
       hourly_rate REAL,
@@ -244,7 +244,7 @@ export async function createEmployee(employee: Employee): Promise<void> {
       created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      employee.id, employee.orgId, employee.name, employee.email, employee.role,
+      employee.id, employee.orgId, employee.name, employee.email || null, employee.role,
       employee.department || null, employee.hourlyRate ?? null,
       employee.currency || null, employee.timezone || null,
       employee.businessHoursStart || null, employee.businessHoursEnd || null, employee.businessHoursDays || null,
