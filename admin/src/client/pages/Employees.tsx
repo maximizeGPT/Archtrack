@@ -245,8 +245,9 @@ export const Employees: React.FC = () => {
 
   const handleGenerateSetupToken = async (employee: Employee) => {
     try {
-      const data = await api.post('/api/auth/setup-token', { employeeId: employee.id });
-      setSetupToken({ token: data.token || data.setupToken, employeeName: employee.name });
+      const res = await api.post('/api/auth/setup-token', { employeeId: employee.id });
+      const tokenData = res.data || res;
+      setSetupToken({ token: tokenData.token || tokenData.setupToken, employeeName: employee.name });
     } catch (err) {
       console.error('Error generating setup token:', err);
       alert(err instanceof Error ? err.message : 'Failed to generate setup token');
