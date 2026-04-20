@@ -418,10 +418,13 @@ export function startDailySummaryScheduler(): void {
         const todayLocal = toLocalDateString(new Date(), tz);
         if (org.daily_summary_last_sent_date === todayLocal) continue;
 
+        // Use hourCycle: 'h23' to force 0-23 — en-US defaults to h24 (1-24)
+        // which returns "24" at midnight, bypassing the hourTarget gate and
+        // causing emails to fire at the start of the day with 0 activity.
         const localHour = parseInt(
           new Intl.DateTimeFormat('en-US', {
             timeZone: tz,
-            hour12: false,
+            hourCycle: 'h23',
             hour: '2-digit'
           }).format(new Date()),
           10
