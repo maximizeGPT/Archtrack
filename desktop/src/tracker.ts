@@ -77,6 +77,14 @@ export async function startTracking(): Promise<void> {
 
   // Load config
   loadConfig();
+
+  // First-run activation: if no device token is saved, look for an
+  // activation file in Downloads (dropped by the admin dashboard's
+  // "Install on this device" flow) and redeem it for a device JWT.
+  if (!config.deviceToken) {
+    await activateFromDownloadsIfNeeded();
+  }
+
   console.log(`Auth: token=${config.deviceToken ? 'present (' + config.deviceToken.length + ' chars)' : 'MISSING'}, server=${config.serverUrl}`);
 
   // Load active-win dynamically
@@ -504,6 +512,113 @@ function loadConfig(): void {
   } catch (err) {
     console.error('Failed to load config:', err);
   }
+}
+
+/**
+ * First-run activation: look for an `archtrack-activate*.json` file in the
+ * user's Downloads folder, redeem the setup token against /api/auth/enroll,
+ * and persist the returned device JWT + employee info into config.json.
+ *
+ * The admin dashboard's "Install on this device" button drops this file so
+ * that a non-technical admin can install the tracker on an employee's
+ * laptop and have it auto-authenticate without copy-pasting tokens.
+ *
+ * Safe to call every startup — it only runs if `config.deviceToken` is
+ * empty. Returns `true` if activation succeeded, `false` otherwise. Never
+ * throws.
+ */
+async function activateFromDownloadsIfNeeded(): Promise<boolean> {
+  // Already have a device token from env var or previous run — skip.
+  if (config.deviceToken) return false;
+
+  let downloadsDir: string;
+  try {
+    downloadsDir = app.getPath('downloads');
+  } catch {
+    return false; // No downloads path on this platform — bail out silently.
+  }
+
+  if (!fs.existsSync(downloadsDir)) return false;
+
+  // Find all archtrack-activate*.json files, pick the newest by mtime.
+  let matches: { path: string; mtimeMs: number }[] = [];
+  try {
+    const entries = fs.readdirSync(downloadsDir);
+    for (const name of entries) {
+      if (!name.startsWith('archtrack-activate') || !name.endsWith('.json')) continue;
+      const full = path.join(downloadsDir, name);
+      try {
+        const stat = fs.statSync(full);
+        if (stat.isFile()) matches.push({ path: full, mtimeMs: stat.mtimeMs });
+      } catch { /* ignore unreadable entries */ }
+    }
+  } catch (err) {
+    console.warn('[activate] could not scan Downloads:', (err as Error).message);
+    return false;
+  }
+
+  if (matches.length === 0) return false;
+
+  matches.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const target = matches[0].path;
+
+  let payload: { setupToken?: string; token?: string; serverUrl?: string } = {};
+  try {
+    payload = JSON.parse(fs.readFileSync(target, 'utf-8'));
+  } catch (err) {
+    console.error('[activate] failed to parse activation file:', (err as Error).message);
+    tryDeleteFile(target);
+    return false;
+  }
+
+  const setupToken = payload.setupToken || payload.token;
+  const serverUrl = (payload.serverUrl || config.serverUrl || '').replace(/\/+$/, '');
+
+  if (!setupToken || !serverUrl) {
+    console.error('[activate] activation file missing setupToken or serverUrl');
+    tryDeleteFile(target);
+    return false;
+  }
+
+  console.log(`[activate] found activation file, enrolling against ${serverUrl}...`);
+
+  try {
+    const resp = await fetch(`${serverUrl}/api/auth/enroll`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ setupToken })
+    });
+    const data: any = await resp.json().catch(() => ({}));
+
+    if (!resp.ok || !data?.success || !data?.data?.accessToken) {
+      const reason = data?.error || `HTTP ${resp.status}`;
+      console.error(`[activate] enrollment rejected: ${reason}`);
+      tryDeleteFile(target); // Stale/invalid token — don't retry on every launch.
+      return false;
+    }
+
+    // Success — persist everything.
+    config.deviceToken = data.data.accessToken;
+    config.employeeId = data.data.employeeId;
+    config.employeeName = data.data.employeeName;
+    config.serverUrl = serverUrl;
+    saveConfig();
+
+    // Clean up ALL activation files so stale ones don't linger.
+    for (const m of matches) tryDeleteFile(m.path);
+
+    console.log(`[activate] ✓ activated as ${data.data.employeeName} (${data.data.employeeId})`);
+    return true;
+  } catch (err) {
+    console.error('[activate] network error during enrollment:', (err as Error).message);
+    // Leave the file in place — this is likely a transient offline state,
+    // user may be trying to install without internet. Next launch will retry.
+    return false;
+  }
+}
+
+function tryDeleteFile(p: string): void {
+  try { fs.unlinkSync(p); } catch { /* ignore */ }
 }
 
 function saveConfig(): void {

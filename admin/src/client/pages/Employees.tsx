@@ -88,6 +88,7 @@ export const Employees: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [setupToken, setSetupToken] = useState<{ token: string; employeeName: string } | null>(null);
+  const [installPrompt, setInstallPrompt] = useState<{ employeeName: string } | null>(null);
   const [formData, setFormData] = useState<EmployeeFormData>(emptyFormData(defaultCurrency));
 
   useEffect(() => {
@@ -251,6 +252,48 @@ export const Employees: React.FC = () => {
     } catch (err) {
       console.error('Error generating setup token:', err);
       alert(err instanceof Error ? err.message : 'Failed to generate setup token');
+    }
+  };
+
+  /**
+   * Zero-friction install flow for non-technical admins: clicked while the
+   * admin is physically at the employee's laptop. Generates a setup token,
+   * then drops an `archtrack-activate-<ts>.json` into the admin's Downloads
+   * folder. When the tracker first runs on that machine it auto-detects the
+   * file, redeems the token against /api/auth/enroll, and starts tracking
+   * as this employee — no copy-pasting required.
+   */
+  const handleInstallOnThisDevice = async (employee: Employee) => {
+    try {
+      const res = await api.post('/api/auth/setup-token', { employeeId: employee.id });
+      const tokenData = res.data || res;
+      const setupToken = tokenData.token || tokenData.setupToken;
+      if (!setupToken) {
+        throw new Error('Server did not return a setup token');
+      }
+
+      // Build the activation payload and trigger a browser download.
+      const payload = {
+        setupToken,
+        serverUrl: window.location.origin,
+        employeeName: employee.name,
+        createdAt: new Date().toISOString()
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `archtrack-activate-${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      // Revoke shortly after to make sure the download actually started.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+      setInstallPrompt({ employeeName: employee.name });
+    } catch (err) {
+      console.error('Error preparing install:', err);
+      alert(err instanceof Error ? err.message : 'Failed to prepare install');
     }
   };
 
@@ -614,6 +657,77 @@ export const Employees: React.FC = () => {
         </div>
       )}
 
+      {/* Install on this Device — post-click modal */}
+      {installPrompt && (
+        <div
+          style={styles.modal}
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setInstallPrompt(null)}
+        >
+          <div style={styles.modalContent} onClick={e => e.stopPropagation()}>
+            <h2 style={styles.modalTitle}>Install on this Device</h2>
+            <p style={{ color: '#2c3e50', marginBottom: '12px', fontSize: '14px', lineHeight: 1.5 }}>
+              An activation file for <strong>{installPrompt.employeeName}</strong> has been saved to your Downloads folder.
+            </p>
+            <div style={{
+              backgroundColor: '#eafaf1',
+              border: '1px solid #a9dfbf',
+              borderRadius: '8px',
+              padding: '12px 14px',
+              marginBottom: '16px',
+              fontSize: '13px',
+              color: '#1e7e44',
+              lineHeight: 1.5,
+            }}>
+              <div style={{ fontWeight: 600, marginBottom: '6px' }}>Next steps on this laptop:</div>
+              <ol style={{ margin: 0, paddingLeft: '18px' }}>
+                <li>Click the button below to download the ArchTrack installer</li>
+                <li>Run the installer</li>
+                <li>That's it — the tracker will auto-connect as <strong>{installPrompt.employeeName}</strong> on first launch</li>
+              </ol>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <a
+                href="/download"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '10px 16px',
+                  backgroundColor: '#27ae60',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  textDecoration: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                ⬇ Download Installer
+              </a>
+              <button
+                onClick={() => setInstallPrompt(null)}
+                style={{
+                  padding: '10px 16px',
+                  backgroundColor: '#ecf0f1',
+                  color: '#2c3e50',
+                  border: 'none',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  cursor: 'pointer',
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {employees.length === 0 && (
         <div style={{
           textAlign: 'center' as const,
@@ -681,6 +795,13 @@ export const Employees: React.FC = () => {
             <div style={styles.cardActions}>
               <button onClick={() => handleEdit(employee)} style={styles.editButton}>
                 Edit
+              </button>
+              <button
+                onClick={() => handleInstallOnThisDevice(employee)}
+                style={styles.installButton}
+                title="Use this when you're sitting at this employee's laptop. Downloads an activation file and the tracker will auto-connect on first launch."
+              >
+                Install on this Device
               </button>
               <button onClick={() => handleGenerateSetupToken(employee)} style={styles.setupButton}>
                 Setup Token
@@ -899,6 +1020,17 @@ const styles: { [key: string]: React.CSSProperties | any } = {
     borderRadius: '6px',
     cursor: 'pointer',
     fontSize: '13px'
+  },
+  installButton: {
+    flex: 1.4,
+    padding: '8px',
+    backgroundColor: '#27ae60',
+    color: '#fff',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: 600
   },
   deleteButton: {
     flex: 1,
