@@ -1,6 +1,6 @@
 {
   "name": "@archtrack/desktop",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Desktop activity tracker for ArchTrack",
   "author": "ArchTrack <support@archtrack.live>",
   "type": "module",
