@@ -49,7 +49,9 @@
     },
     "dmg": {
       "title": "ArchTrack ${version}",
-      "icon": "assets/icon.png"
+      "icon": "assets/icon.png",
+      "background": null,
+      "writeUpdateInfo": false
     },
     "win": {
       "target": [
