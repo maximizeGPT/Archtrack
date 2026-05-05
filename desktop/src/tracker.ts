@@ -55,6 +55,12 @@ let lastActivity: TrackedActivity | null = null;
 let lastSyncTime = 0;
 let isOnline = true;
 
+// Module-level timer handles so onSystemResume can rebuild them after a
+// macOS App Nap freeze. NodeJS.Timeout in Electron's runtime.
+let activityTimer: NodeJS.Timeout | null = null;
+let syncTimer: NodeJS.Timeout | null = null;
+let onlineTimer: NodeJS.Timeout | null = null;
+
 // Context for pattern detection
 let currentAppStartTime = Date.now();
 let lastInputTime = Date.now();
@@ -100,14 +106,12 @@ export async function startTracking(): Promise<void> {
   // Load offline queue
   loadOfflineQueue();
 
-  // Check every 10 seconds for activity
-  setInterval(checkActivity, 10000);
-
-  // Sync to server every 60 seconds
-  setInterval(syncToServer, 60000);
-
-  // Check online status
-  setInterval(checkOnlineStatus, 30000);
+  // Wire up the periodic timers. They're held in module-level handles so
+  // `onSystemResume` can clear and re-arm them after a sleep/wake cycle —
+  // we've seen macOS App Nap freeze the JS event loop for days even with
+  // powerSaveBlocker on, leaving setInterval handles alive but never
+  // firing. Re-creating the intervals on wake guarantees we recover.
+  startPeriodicTimers();
 
   // Periodic screenshot capture — controlled by org-level settings on the
   // server. Polls /api/organization to discover the current toggle and
@@ -703,4 +707,42 @@ export function getTrackingStatus() {
     lastActivity,
     config
   };
+}
+
+/**
+ * (Re)create the periodic check/sync timers. Called once at startup and
+ * again from onSystemResume() after a sleep/wake cycle, because macOS App
+ * Nap can freeze the JS event loop for hours or days even with
+ * powerSaveBlocker on — leaving setInterval handles alive but inert.
+ * Clearing and recreating guarantees fresh timers.
+ */
+function startPeriodicTimers(): void {
+  if (activityTimer) clearInterval(activityTimer);
+  if (syncTimer) clearInterval(syncTimer);
+  if (onlineTimer) clearInterval(onlineTimer);
+
+  activityTimer = setInterval(checkActivity, 10000);
+  syncTimer = setInterval(syncToServer, 60000);
+  onlineTimer = setInterval(checkOnlineStatus, 30000);
+}
+
+/**
+ * Called by main.ts on `powerMonitor.on('resume')` — fired natively by
+ * Electron when the system wakes from sleep. We force an immediate
+ * activity check + sync (so the gap-backfill row goes in promptly) and
+ * rebuild the periodic timers so frozen ones can never silently persist
+ * after the wake. Safe to call multiple times.
+ */
+export function onSystemResume(): void {
+  console.log('[power] system resumed — re-arming tracker timers');
+  // Reset the "last check" clock to NOW so the gap detector inside
+  // checkActivity computes the correct sleep gap from this point forward.
+  // (checkActivity itself measures the gap before resetting, so we don't
+  // need to reset it here — let the first post-resume tick do that.)
+  startPeriodicTimers();
+  // Fire one immediate tick + sync in case the next setInterval boundary
+  // is up to 10s/60s away.
+  Promise.resolve().then(() => checkActivity()).catch(() => { /* swallow */ });
+  Promise.resolve().then(() => syncToServer()).catch(() => { /* swallow */ });
+  Promise.resolve().then(() => checkOnlineStatus()).catch(() => { /* swallow */ });
 }

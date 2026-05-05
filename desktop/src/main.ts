@@ -1,6 +1,6 @@
-import { app, Tray, Menu, nativeImage, ipcMain, powerSaveBlocker } from 'electron';
+import { app, Tray, Menu, nativeImage, ipcMain, powerSaveBlocker, powerMonitor } from 'electron';
 import Store from 'electron-store';
-import { startTracking, getTrackingStatus, setupIpcHandlers } from './tracker.js';
+import { startTracking, getTrackingStatus, setupIpcHandlers, onSystemResume } from './tracker.js';
 import { ARCHTRACK_CONFIG, getServerUrl } from './config.js';
 
 const store = new Store({
@@ -61,6 +61,25 @@ app.whenReady().then(async () => {
   }
   setupIpcHandlers();
   await startTracking();
+
+  // macOS App Nap can freeze the JS event loop for hours or days after a
+  // sleep/wake cycle even with powerSaveBlocker on, leaving setInterval
+  // handles alive but inert (we observed an 8-day silent gap in v1.0.1).
+  // powerMonitor events fire natively from the Electron side and are not
+  // subject to App Nap, so we use them to re-arm the JS timers. Safe to
+  // hook on Windows/Linux too — these events fire on lid open / display
+  // wake / hibernate-resume and are no-ops if the timers were already
+  // healthy.
+  powerMonitor.on('resume', () => {
+    try { onSystemResume(); } catch (e) { console.error('[power] onSystemResume failed:', e); }
+  });
+  powerMonitor.on('unlock-screen', () => {
+    try { onSystemResume(); } catch (e) { console.error('[power] onSystemResume failed:', e); }
+  });
+  // Log suspends so the next morning we can correlate gaps with sleeps.
+  powerMonitor.on('suspend', () => {
+    console.log('[power] system suspending');
+  });
 
   if (!STEALTH_MODE) {
     console.log('');
