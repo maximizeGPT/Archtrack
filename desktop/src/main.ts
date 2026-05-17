@@ -1,4 +1,4 @@
-import { app, Tray, Menu, nativeImage, ipcMain, powerSaveBlocker, powerMonitor } from 'electron';
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, powerSaveBlocker, powerMonitor } from 'electron';
 import Store from 'electron-store';
 import { startTracking, getTrackingStatus, setupIpcHandlers, onSystemResume } from './tracker.js';
 import { ARCHTRACK_CONFIG, getServerUrl } from './config.js';
@@ -30,6 +30,14 @@ let tray: Tray | null = null;
 // when the app has no visible window — sync/screenshot loops freeze
 // indefinitely. Required for headless / LSUIElement builds.
 let powerSaveBlockerId: number | null = null;
+// Hold a reference to a hidden BrowserWindow. macOS App Nap will fully
+// suspend the JS event loop for headless Electron apps even with
+// powerSaveBlocker on — we've observed multiple 7-12 day silent gaps in
+// production. Creating ANY BrowserWindow (even invisible) flips the app
+// from "headless" to "active GUI app" in macOS's bookkeeping and keeps
+// the event loop running. `backgroundThrottling: false` additionally
+// disables Chromium's own throttling of background renderers.
+let keepAliveWindow: BrowserWindow | null = null;
 
 app.whenReady().then(async () => {
   // Block App Nap and idle suspension on macOS. Safe no-op on Windows/Linux.
@@ -59,6 +67,11 @@ app.whenReady().then(async () => {
   if (!STEALTH_MODE) {
     createTray();
   }
+
+  // Create the invisible keep-alive window BEFORE startTracking so the
+  // first setInterval calls register against a non-throttled event loop.
+  createKeepAliveWindow();
+
   setupIpcHandlers();
   await startTracking();
 
@@ -88,6 +101,57 @@ app.whenReady().then(async () => {
     console.log('✓ Syncing to admin dashboard every 60 seconds');
   }
 });
+
+/**
+ * Create a 1x1 invisible BrowserWindow that exists purely to defeat
+ * macOS App Nap and Chromium's background-renderer throttling. The
+ * window has no UI — it's positioned off-screen, transparent, frameless,
+ * with no shadow. The user never sees it. But because the app now has a
+ * BrowserWindow, macOS considers it an active GUI app and keeps its JS
+ * event loop running indefinitely. backgroundThrottling: false
+ * additionally tells Chromium not to throttle this window's timers.
+ *
+ * Without this, setInterval handles in the main process freeze for days
+ * at a time on lid-close, App Nap, or low-power states — leaving the
+ * tracker silently dead. Observed gaps of 8d and 12d in production.
+ */
+function createKeepAliveWindow(): void {
+  try {
+    keepAliveWindow = new BrowserWindow({
+      width: 1,
+      height: 1,
+      x: -100,
+      y: -100,
+      show: false,
+      skipTaskbar: true,
+      transparent: true,
+      frame: false,
+      hasShadow: false,
+      focusable: false,
+      resizable: false,
+      minimizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      title: 'ArchTrack',
+      webPreferences: {
+        backgroundThrottling: false,
+        offscreen: false,
+        sandbox: true,
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    });
+    // Load a trivial in-memory page. The contents don't matter — we
+    // just need the window to exist and have a live renderer process.
+    keepAliveWindow.loadURL('data:text/html;charset=utf-8,<title>ArchTrack</title>');
+    // Make sure it never accidentally becomes visible.
+    keepAliveWindow.on('show', () => { try { keepAliveWindow?.hide(); } catch { /* ignore */ } });
+    keepAliveWindow.on('closed', () => { keepAliveWindow = null; });
+    console.log('[keep-alive] hidden window created to defeat App Nap');
+  } catch (e) {
+    console.error('[keep-alive] failed to create hidden window:', (e as Error).message);
+  }
+}
 
 function createTray(): void {
   // Simple colored square icon (green for active)

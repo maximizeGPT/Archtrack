@@ -709,21 +709,58 @@ export function getTrackingStatus() {
   };
 }
 
+// Watchdog state — when did checkActivity last actually run?
+let lastCheckActivityRun = Date.now();
+let watchdogTimer: NodeJS.Timeout | null = null;
+
 /**
  * (Re)create the periodic check/sync timers. Called once at startup and
- * again from onSystemResume() after a sleep/wake cycle, because macOS App
- * Nap can freeze the JS event loop for hours or days even with
- * powerSaveBlocker on — leaving setInterval handles alive but inert.
- * Clearing and recreating guarantees fresh timers.
+ * again from onSystemResume() / the watchdog after a freeze, because
+ * macOS App Nap can freeze the JS event loop for hours or days even with
+ * powerSaveBlocker + a hidden BrowserWindow — leaving setInterval handles
+ * alive but inert. Clearing and recreating guarantees fresh timers.
  */
 function startPeriodicTimers(): void {
   if (activityTimer) clearInterval(activityTimer);
   if (syncTimer) clearInterval(syncTimer);
   if (onlineTimer) clearInterval(onlineTimer);
+  if (watchdogTimer) clearInterval(watchdogTimer);
 
-  activityTimer = setInterval(checkActivity, 10000);
+  // Wrap checkActivity so each successful run updates the watchdog's
+  // "I am alive" timestamp. The watchdog uses this to detect when the
+  // timers have stopped firing.
+  const tickedCheckActivity = async () => {
+    lastCheckActivityRun = Date.now();
+    try { await checkActivity(); } catch (e) { console.error('[tracker] checkActivity threw:', (e as Error).message); }
+  };
+
+  activityTimer = setInterval(tickedCheckActivity, 10000);
   syncTimer = setInterval(syncToServer, 60000);
   onlineTimer = setInterval(checkOnlineStatus, 30000);
+
+  // Watchdog: every 30s look at the wall-clock delta since checkActivity
+  // last ran. If more than 3 minutes have passed (i.e. 18 missed ticks),
+  // assume the event loop was frozen and recovered, and rebuild the
+  // timers from scratch. We also fire one immediate check + sync so the
+  // gap-backfill in checkActivity records the freeze duration.
+  //
+  // This is belt-and-suspenders alongside the hidden BrowserWindow and
+  // powerMonitor.on('resume'). If those defeat App Nap as expected,
+  // this watchdog never trips. If they don't, the user-visible gap is
+  // capped at ~3 minutes instead of days.
+  lastCheckActivityRun = Date.now();
+  watchdogTimer = setInterval(() => {
+    const gapMs = Date.now() - lastCheckActivityRun;
+    if (gapMs > 3 * 60 * 1000) {
+      console.warn(`[watchdog] checkActivity hasn't run in ${Math.round(gapMs / 1000)}s — rebuilding timers`);
+      // Note: calling startPeriodicTimers() from inside its own timer
+      // is safe — clearInterval on watchdogTimer below cancels OUR
+      // timer before the recursive call recreates a new one.
+      startPeriodicTimers();
+      Promise.resolve().then(() => checkActivity()).catch(() => { /* swallow */ });
+      Promise.resolve().then(() => syncToServer()).catch(() => { /* swallow */ });
+    }
+  }, 30000);
 }
 
 /**
